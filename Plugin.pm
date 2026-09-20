@@ -1,7 +1,8 @@
 package Plugins::ArchiveLMA::Plugin;
 
-# Browse and stream any archive.org collection (defaults to "aadamjacobs",
-# the Live Music Archive collection this plugin was originally built for).
+# Browse and stream one or more archive.org collections as a single merged
+# experience (defaults to "aadamjacobs", the Live Music Archive collection
+# this plugin was originally built for).
 
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
@@ -43,15 +44,23 @@ my $prefs = preferences('plugin.archivelma');
 
 sub getDisplayName { 'PLUGIN_ARCHIVELMA' }
 
-sub _collection {
-	return $prefs->get('collection') || DEFAULT_COLLECTION;
+sub _collections {
+	my $collections = $prefs->get('collections');
+	return @$collections if $collections && @$collections;
+	return (DEFAULT_COLLECTION);
 }
 
-# Restricts to playable media - matters once the collection is configurable,
-# since a non-audio (e.g. text/video) collection would otherwise produce
-# "shows" whose tracklist is just an empty Play All / Add All screen.
+# Restricts to playable media - matters once the collection list is
+# configurable, since a non-audio (e.g. text/video) collection would
+# otherwise produce "shows" whose tracklist is just an empty Play All /
+# Add All screen. Multiple collections are OR'd together so every browse
+# path (search, year, artist, venue, random) transparently spans all of
+# them as one merged catalog - archive.org's search index handles this
+# natively, so there's no local copy of the catalog to keep in sync.
 sub _baseQuery {
-	return 'collection:' . _collection() . ' AND mediatype:(audio OR etree)';
+	my @collections = _collections();
+	my $collectionFilter = '(' . join(' OR ', map { "collection:$_" } @collections) . ')';
+	return "$collectionFilter AND mediatype:(audio OR etree)";
 }
 
 # Fetch and JSON-decode a URL, with one silent retry on a transient network
@@ -93,7 +102,15 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collection => DEFAULT_COLLECTION });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ] });
+
+	# One-time migration from the earlier single-collection pref.
+	$prefs->migrate(1, sub {
+		if (my $old = $prefs->get('collection')) {
+			$prefs->set('collections', [ $old ]);
+		}
+		1;
+	});
 
 	if (main::WEBUI) {
 		require Plugins::ArchiveLMA::Settings;

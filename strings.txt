@@ -1,16 +1,22 @@
 # String file for ArchiveLMA plugin
 
 PLUGIN_ARCHIVELMA
-	EN	Live Music Archive Browser
+	EN	Archive.org Browser
 
 PLUGIN_ARCHIVELMA_DESC
-	EN	Browse and stream any archive.org collection (defaults to the Aadam Jacobs Live Music Archive collection; configurable in Settings)
+	EN	Browse and stream one or more archive.org collections as a single merged catalog (defaults to the Aadam Jacobs Live Music Archive collection; configurable in Settings)
 
-PLUGIN_ARCHIVELMA_SETTING_COLLECTION
-	EN	Archive.org Collection Identifier
+PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS
+	EN	Archive.org Collections
 
-PLUGIN_ARCHIVELMA_SETTING_COLLECTION_DESC
-	EN	The archive.org collection to browse. Find it in the collection's URL: archive.org/details/&lt;identifier&gt;.
+PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC
+	EN	The archive.org collections to browse, merged into one catalog. Find each identifier in its collection's URL: archive.org/details/&lt;identifier&gt;.
+
+PLUGIN_ARCHIVELMA_ADD_COLLECTION
+	EN	Add a collection
+
+PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS
+	EN	Current collections
 
 PLUGIN_ARCHIVELMA_SEARCH
 	EN	Search

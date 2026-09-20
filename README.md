@@ -1,13 +1,16 @@
 # lms-archive-org
 
 A [Lyrion Music Server](https://lyrion.org/) (formerly Logitech Media Server / SqueezeboxServer)
-plugin that browses and streams any [archive.org](https://archive.org) collection directly —
-no downloading, no separate library import. Works through LMS's normal web UI, Material Skin,
-and any Squeezebox/software player, since it's just a menu of remote streams.
+plugin that browses and streams one or more [archive.org](https://archive.org) collections
+directly — no downloading, no separate library import. Works through LMS's normal web UI,
+Material Skin, and any Squeezebox/software player, since it's just a menu of remote streams.
 
 It defaults to the [Aadam Jacobs Live Music Archive collection](https://archive.org/details/aadamjacobs)
-(a few thousand live show recordings taped in Chicago, 1980s–2000s), but the collection is a
-setting — point it at any other archive.org collection identifier and it works the same way.
+(a few thousand live show recordings taped in Chicago, 1980s–2000s), but the collections are a
+setting. Configure more than one and they're merged into a single catalog — Search, Browse by
+Year/Artist/Venue, Recently Added, and Random Show all transparently span everything you've
+added, since each is just one archive.org query with the collections OR'd together. There's no
+local index or scheduled sync to keep in sync; every browse action queries archive.org live.
 
 ## Features
 
@@ -20,7 +23,7 @@ setting — point it at any other archive.org collection identifier and it works
 - **Play Entire Show / Add Entire Show to Queue** — one tap to queue every track of a show, not
   just individual tracks
 - Show artwork, pulled from archive.org's thumbnail service
-- Configurable collection identifier (Settings → Plugins → Live Music Archive Browser)
+- Configurable collection list, merged into one catalog (Settings → Plugins → Archive.org Browser)
 - Restricted to audio items, so pointing this at a mixed-media collection won't surface
   unplayable text/video entries
 - Automatically retries once on a transient network hiccup before showing an error
@@ -41,7 +44,7 @@ setting — point it at any other archive.org collection identifier and it works
    ```
    https://raw.githubusercontent.com/cdybdahl/lms-archive-org/master/repository.xml
    ```
-2. Save, then find **Live Music Archive Browser** in the plugin list below and check it.
+2. Save, then find **Archive.org Browser** in the plugin list below and check it.
 3. Restart the server when prompted.
 
 Future updates then show up as a normal plugin update, no manual re-copying.
@@ -64,16 +67,18 @@ The folder **must** be named `ArchiveLMA` — that's what makes the Perl package
 | Docker | wherever your container mounts `config/plugin/` |
 | macOS/Windows | inside the app's data directory, under `Plugins/` |
 
-After restarting, enable it (if not already) under Settings → Plugins, and configure the
-collection under Settings → Plugins → Live Music Archive Browser.
+After restarting, enable it (if not already) under Settings → Plugins, and configure your
+collections under Settings → Plugins → Archive.org Browser.
 
 ## Configuration
 
-Settings → Plugins → **Live Music Archive Browser** → **Archive.org Collection Identifier**.
+Settings → Plugins → **Archive.org Browser** → add each collection identifier you want included,
+one at a time. Delete one by checking its box and saving.
 
 The identifier is the last segment of the collection's archive.org URL — for
 `archive.org/details/aadamjacobs`, that's `aadamjacobs`. Any archive.org collection works, not
-just Live Music Archive ones, as long as its items have audio files.
+just Live Music Archive ones, as long as its items have audio files. Add as many as you like;
+they're merged into a single browsable catalog.
 
 ## How it works
 
