@@ -20,6 +20,8 @@ local index or scheduled sync to keep in sync; every browse action queries archi
   of distinct artists/venues would be unusable as one flat list)
 - **Recently Added**
 - **Random Show** — one tap to a random pick from the whole collection
+- **Listen Later** — save whole shows to a list for one-tap return later (from a show's track
+  list, not per-track)
 - **Play Entire Show / Add Entire Show to Queue** — one tap to queue every track of a show, not
   just individual tracks
 - Show artwork, pulled from archive.org's thumbnail service

@@ -50,6 +50,30 @@ sub _collections {
 	return (DEFAULT_COLLECTION);
 }
 
+sub _listenLater {
+	return $prefs->get('listenLater') || [];
+}
+
+sub _isInListenLater {
+	my $identifier = shift;
+	return !!grep { $_->{identifier} eq $identifier } @{ _listenLater() };
+}
+
+sub _addToListenLater {
+	my ($identifier, $name, $name2) = @_;
+	my $list = _listenLater();
+	return if grep { $_->{identifier} eq $identifier } @$list;
+	unshift @$list, { identifier => $identifier, name => $name, name2 => $name2 };
+	$prefs->set('listenLater', $list);
+}
+
+sub _removeFromListenLater {
+	my $identifier = shift;
+	my $list = _listenLater();
+	@$list = grep { $_->{identifier} ne $identifier } @$list;
+	$prefs->set('listenLater', $list);
+}
+
 # Restricts to playable media - matters once the collection list is
 # configurable, since a non-audio (e.g. text/video) collection would
 # otherwise produce "shows" whose tracklist is just an empty Play All /
@@ -102,7 +126,7 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ] });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [] });
 
 	# One-time migration from the earlier single-collection pref.
 	$prefs->migrate(1, sub {
@@ -162,8 +186,33 @@ sub handleFeed {
 				type => 'link',
 				url  => \&randomShowHandler,
 			},
+			{
+				name => cstring($client, 'PLUGIN_ARCHIVELMA_LISTEN_LATER'),
+				type => 'link',
+				url  => \&listenLaterHandler,
+			},
 		],
 	});
+}
+
+sub listenLaterHandler {
+	my ($client, $cb, $args) = @_;
+
+	my @items = map {
+		my $show = $_;
+		{
+			name        => $show->{name},
+			name2       => $show->{name2},
+			type        => 'link',
+			image       => IMAGE_URL . $show->{identifier},
+			url         => \&trackListHandler,
+			passthrough => [ { identifier => $show->{identifier} } ],
+		};
+	} @{ _listenLater() };
+
+	push @items, { name => cstring($client, 'EMPTY') } unless @items;
+
+	$cb->({ items => \@items });
 }
 
 # archive.org's facet API currently rejects arbitrary facet fields, so instead
@@ -410,6 +459,12 @@ sub trackListHandler {
 				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 			}
 
+			my $meta = $result->{metadata} || {};
+			my $showName = $meta->{title} || $identifier;
+			my $showDate = $meta->{date};
+			$showDate =~ s/T.*$// if $showDate;
+			my $showName2 = join(' - ', grep { $_ } ($showDate, $meta->{venue} || $meta->{coverage}));
+
 			# Archive.org carries each track in several formats; keep only the
 			# best-priority file per track so we don't list duplicates.
 			my %byTrack;
@@ -447,6 +502,7 @@ sub trackListHandler {
 
 			if (@items) {
 				my @urls = map { $_->{play} } @items;
+				unshift @items, _listenLaterItem($client, $identifier, $showName, $showName2);
 				unshift @items, _addAllItem($client, \@urls);
 				unshift @items, _playAllItem($client, \@urls);
 			}
@@ -512,6 +568,29 @@ sub randomShowHandler {
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		},
 	);
+}
+
+sub _listenLaterItem {
+	my ($client, $identifier, $name, $name2) = @_;
+
+	my $inList = _isInListenLater($identifier);
+
+	return {
+		name => cstring($client, $inList ? 'PLUGIN_ARCHIVELMA_REMOVE_LISTEN_LATER' : 'PLUGIN_ARCHIVELMA_ADD_LISTEN_LATER'),
+		type => 'link',
+		url  => sub {
+			my ($client, $cb) = @_;
+
+			if ($inList) {
+				_removeFromListenLater($identifier);
+				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_REMOVED_LISTEN_LATER'), showBriefly => 1 } ] });
+			}
+			else {
+				_addToListenLater($identifier, $name, $name2);
+				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ADDED_LISTEN_LATER'), showBriefly => 1 } ] });
+			}
+		},
+	};
 }
 
 sub _playAllItem {
