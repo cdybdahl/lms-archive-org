@@ -29,10 +29,21 @@ setting — point it at any other archive.org collection identifier and it works
 
 ## Installation
 
-There's no plugin-repository listing yet (see [Roadmap](#roadmap)), so install manually:
+### Option 1: via repository URL (recommended)
+
+1. Settings → Plugins → **Additional Repositories** → paste:
+   ```
+   https://raw.githubusercontent.com/cdybdahl/lms-archive-org/master/repository.xml
+   ```
+2. Save, then find **Live Music Archive Browser** in the plugin list below and check it.
+3. Restart the server when prompted.
+
+Future updates then show up as a normal plugin update, no manual re-copying.
+
+### Option 2: manual copy
 
 ```sh
-git clone https://github.com/<your-username>/lms-archive-org.git ArchiveLMA
+git clone https://github.com/cdybdahl/lms-archive-org.git ArchiveLMA
 sudo cp -r ArchiveLMA /path/to/lms/Plugins/
 sudo chown -R <lms-user>:<lms-group> /path/to/lms/Plugins/ArchiveLMA
 sudo systemctl restart lyrionmusicserver   # or logitechmediaserver, squeezeboxserver, etc.
@@ -71,10 +82,17 @@ nothing is mirrored. Listings are cached briefly (an hour for search results, a 
 artist list, a week for a show's track list) to keep browsing snappy and avoid hammering
 archive.org's API.
 
+## Releasing a new version
+
+1. Bump `<version>` in `install.xml`.
+2. Run `scripts/build_release.sh` — it builds `ArchiveLMA-<version>.zip` and prints its sha1.
+3. `gh release create v<version> ArchiveLMA-<version>.zip` to attach it to a new GitHub release.
+4. Update `repository.xml`'s `version`, `url`, and `sha` to match, commit, and push.
+
 ## Roadmap
 
-- Package a `repository.xml` so this can be added as a proper LMS plugin repository URL instead
-  of a manual copy
+- Get listed in the [community plugin repository](https://github.com/lms-community/lms-plugin-repository)
+  so `repository.xml` isn't a manual add
 - Optional per-collection default sort order
 
 ## License
