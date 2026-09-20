@@ -102,9 +102,24 @@ archive.org's API.
 3. `gh release create v<version> ArchiveLMA-<version>.zip` to attach it to a new GitHub release.
 4. Update `repository.xml`'s `version`, `url`, and `sha` to match, commit, and push.
 
+## Security
+
+- No secrets or credentials anywhere in the plugin or its history.
+- Zero external CPAN dependencies - only modules already bundled with LMS, plus core Perl. No
+  third-party supply chain.
+- Every outbound HTTP request targets a hardcoded `archive.org` URL; nothing in configuration or
+  user input can redirect a request elsewhere.
+- Collection identifiers entered in Settings are validated against archive.org's actual
+  identifier shape (`[A-Za-z0-9_.-]+`) before being used to build a search query, so a malformed
+  or malicious value is rejected rather than reaching the query string.
+- Settings pages are already restricted by LMS itself to the local network/localhost - this
+  plugin doesn't add any additional network-facing surface.
+
+Found something? Open an issue.
+
 ## Roadmap
 
-- Get listed in the [community plugin repository](https://github.com/lms-community/lms-plugin-repository)
+- [Submitted to the community plugin repository](https://github.com/LMS-Community/lms-plugin-repository/pull/83)
   so `repository.xml` isn't a manual add
 - Whole-show Favorites — LMS resolves a `link`-type favorite via a real HTTP fetch of an OPML
   feed, not a Perl callback, so this needs a dedicated web endpoint (e.g. serving a per-show OPML

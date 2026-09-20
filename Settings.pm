@@ -4,8 +4,14 @@ use strict;
 use base qw(Slim::Web::Settings);
 
 use Slim::Utils::Prefs;
+use Slim::Utils::Strings qw(string);
 
 my $prefs = preferences('plugin.archivelma');
+
+# Real archive.org identifiers are always this shape. Rejecting anything
+# else here means a mistyped or malicious value can never reach the Solr
+# query string _baseQuery() builds.
+use constant VALID_IDENTIFIER => qr/^[A-Za-z0-9_.-]+$/;
 
 sub name {
 	return Slim::Web::HTTP::CSRF->protectName('PLUGIN_ARCHIVELMA');
@@ -35,9 +41,15 @@ sub handler {
 		}
 
 		my $new = $params->{newcollection};
-		if (defined $new) {
-			$new =~ s/^\s+|\s+$//g;
-			push @$collections, $new if length($new) && !grep { $_ eq $new } @$collections;
+		$new =~ s/^\s+|\s+$//g if defined $new;
+
+		if (defined $new && length($new)) {
+			if ($new !~ VALID_IDENTIFIER) {
+				$params->{warning} .= sprintf(string('PLUGIN_ARCHIVELMA_INVALID_COLLECTION'), $new);
+			}
+			elsif (!grep { $_ eq $new } @$collections) {
+				push @$collections, $new;
+			}
 		}
 
 		$prefs->set('collections', $collections);

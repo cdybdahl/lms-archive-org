@@ -18,6 +18,9 @@ PLUGIN_ARCHIVELMA_ADD_COLLECTION
 PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS
 	EN	Current collections
 
+PLUGIN_ARCHIVELMA_INVALID_COLLECTION
+	EN	"%s" doesn't look like a valid archive.org collection identifier (letters, numbers, dots, underscores, and hyphens only) - not added.<br/>
+
 PLUGIN_ARCHIVELMA_SEARCH
 	EN	Search
 
