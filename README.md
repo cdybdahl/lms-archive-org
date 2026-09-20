@@ -1,0 +1,89 @@
+# lms-archive-org
+
+A [Lyrion Music Server](https://lyrion.org/) (formerly Logitech Media Server / SqueezeboxServer)
+plugin that browses and streams any [archive.org](https://archive.org) collection directly —
+no downloading, no separate library import. Works through LMS's normal web UI, Material Skin,
+and any Squeezebox/software player, since it's just a menu of remote streams.
+
+It defaults to the [Aadam Jacobs Live Music Archive collection](https://archive.org/details/aadamjacobs)
+(a few thousand live show recordings taped in Chicago, 1980s–2000s), but the collection is a
+setting — point it at any other archive.org collection identifier and it works the same way.
+
+## Features
+
+- **Search** — full-text search across show titles, artists, and venues
+- **Browse by Year** — every year the collection spans, newest/oldest first
+- **Browse by Artist** — an A–Z index (collections with thousands of distinct artists would be
+  unusable as one flat list)
+- **Recently Added**
+- **Play Entire Show / Add Entire Show to Queue** — one tap to queue every track of a show, not
+  just individual tracks
+- Configurable collection identifier (Settings → Plugins → Live Music Archive Browser)
+- Automatically retries once on a transient network hiccup before showing an error
+
+## Requirements
+
+- Lyrion Music Server or Logitech Media Server 7.0+
+- A player (hardware Squeezebox, or software like `squeezelite`) — optional, but you'll want
+  something to actually play audio to
+
+## Installation
+
+There's no plugin-repository listing yet (see [Roadmap](#roadmap)), so install manually:
+
+```sh
+git clone https://github.com/<your-username>/lms-archive-org.git ArchiveLMA
+sudo cp -r ArchiveLMA /path/to/lms/Plugins/
+sudo chown -R <lms-user>:<lms-group> /path/to/lms/Plugins/ArchiveLMA
+sudo systemctl restart lyrionmusicserver   # or logitechmediaserver, squeezeboxserver, etc.
+```
+
+The folder **must** be named `ArchiveLMA` — that's what makes the Perl package
+(`Plugins::ArchiveLMA::Plugin`) resolve. Where `Plugins/` actually lives depends on your install:
+
+| Install type | Typical `Plugins/` location |
+|---|---|
+| Debian/Ubuntu package | `/var/lib/squeezeboxserver/Plugins/` (may be reached via a symlink at `/usr/share/squeezeboxserver/Plugins/`) |
+| Docker | wherever your container mounts `config/plugin/` |
+| macOS/Windows | inside the app's data directory, under `Plugins/` |
+
+After restarting, enable it (if not already) under Settings → Plugins, and configure the
+collection under Settings → Plugins → Live Music Archive Browser.
+
+## Configuration
+
+Settings → Plugins → **Live Music Archive Browser** → **Archive.org Collection Identifier**.
+
+The identifier is the last segment of the collection's archive.org URL — for
+`archive.org/details/aadamjacobs`, that's `aadamjacobs`. Any archive.org collection works, not
+just Live Music Archive ones, as long as its items have audio files.
+
+## How it works
+
+The plugin talks to two public, unauthenticated archive.org endpoints:
+
+- `advancedsearch.php` for search, year/artist browsing, and pagination
+- `metadata/<identifier>` for a show's track listing
+
+Playback URLs are archive.org's own `download/<identifier>/<file>` links — LMS streams them
+directly, the same as any other internet radio-style source. Nothing is downloaded to the server;
+nothing is mirrored. Listings are cached briefly (an hour for search results, a day for the full
+artist list, a week for a show's track list) to keep browsing snappy and avoid hammering
+archive.org's API.
+
+## Roadmap
+
+- Package a `repository.xml` so this can be added as a proper LMS plugin repository URL instead
+  of a manual copy
+- Optional per-collection default sort order
+
+## License
+
+[MIT](LICENSE)
+
+## Acknowledgments
+
+- [Aadam Jacobs](https://archive.org/details/aadamjacobs) and the Internet Archive's
+  [Live Music Archive](https://archive.org/details/etree) for the recordings this was built
+  around
+- The [Lyrion Music Server](https://lyrion.org/) project

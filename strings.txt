@@ -1,0 +1,40 @@
+# String file for ArchiveLMA plugin
+
+PLUGIN_ARCHIVELMA
+	EN	Live Music Archive Browser
+
+PLUGIN_ARCHIVELMA_DESC
+	EN	Browse and stream any archive.org collection (defaults to the Aadam Jacobs Live Music Archive collection; configurable in Settings)
+
+PLUGIN_ARCHIVELMA_SETTING_COLLECTION
+	EN	Archive.org Collection Identifier
+
+PLUGIN_ARCHIVELMA_SETTING_COLLECTION_DESC
+	EN	The archive.org collection to browse. Find it in the collection's URL: archive.org/details/&lt;identifier&gt;.
+
+PLUGIN_ARCHIVELMA_SEARCH
+	EN	Search
+
+PLUGIN_ARCHIVELMA_BY_YEAR
+	EN	Browse by Year
+
+PLUGIN_ARCHIVELMA_BY_ARTIST
+	EN	Browse by Artist
+
+PLUGIN_ARCHIVELMA_RECENT
+	EN	Recently Added
+
+PLUGIN_ARCHIVELMA_ERROR
+	EN	Sorry, archive.org could not be reached. Please try again.
+
+PLUGIN_ARCHIVELMA_PLAY_ALL
+	EN	Play Entire Show
+
+PLUGIN_ARCHIVELMA_ADD_ALL
+	EN	Add Entire Show to Queue
+
+PLUGIN_ARCHIVELMA_PLAYING
+	EN	Playing entire show...
+
+PLUGIN_ARCHIVELMA_ADDED
+	EN	Added entire show to queue
