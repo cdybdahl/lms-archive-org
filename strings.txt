@@ -21,8 +21,14 @@ PLUGIN_ARCHIVELMA_BY_YEAR
 PLUGIN_ARCHIVELMA_BY_ARTIST
 	EN	Browse by Artist
 
+PLUGIN_ARCHIVELMA_BY_VENUE
+	EN	Browse by Venue
+
 PLUGIN_ARCHIVELMA_RECENT
 	EN	Recently Added
+
+PLUGIN_ARCHIVELMA_RANDOM
+	EN	Random Show
 
 PLUGIN_ARCHIVELMA_ERROR
 	EN	Sorry, archive.org could not be reached. Please try again.

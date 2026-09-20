@@ -20,11 +20,12 @@ use constant DEFAULT_COLLECTION => 'aadamjacobs';
 use constant SEARCH_URL        => 'https://archive.org/advancedsearch.php';
 use constant METADATA_URL      => 'https://archive.org/metadata/';
 use constant DOWNLOAD_URL      => 'https://archive.org/download/';
+use constant IMAGE_URL         => 'https://archive.org/services/img/';
 use constant PAGE_SIZE_DEFAULT => 50;
-use constant LIST_CACHE_EXPIRY   => 3600;        # 1 hour for search/browse listings
-use constant META_CACHE_EXPIRY   => 86400 * 7;   # 1 week for per-show track listings
-use constant ARTIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist list
-use constant ALL_ITEMS_ROWS      => 4000;        # comfortably above the collection's ~3400 shows
+use constant LIST_CACHE_EXPIRY       => 3600;        # 1 hour for search/browse listings
+use constant META_CACHE_EXPIRY       => 86400 * 7;   # 1 week for per-show track listings
+use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist/venue lists
+use constant ALL_ITEMS_ROWS          => 4000;        # comfortably above the collection's ~3400 shows
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
 
@@ -44,6 +45,13 @@ sub getDisplayName { 'PLUGIN_ARCHIVELMA' }
 
 sub _collection {
 	return $prefs->get('collection') || DEFAULT_COLLECTION;
+}
+
+# Restricts to playable media - matters once the collection is configurable,
+# since a non-audio (e.g. text/video) collection would otherwise produce
+# "shows" whose tracklist is just an empty Play All / Add All screen.
+sub _baseQuery {
+	return 'collection:' . _collection() . ' AND mediatype:(audio OR etree)';
 }
 
 # Fetch and JSON-decode a URL, with one silent retry on a transient network
@@ -115,15 +123,27 @@ sub handleFeed {
 				url  => \&yearListHandler,
 			},
 			{
-				name => cstring($client, 'PLUGIN_ARCHIVELMA_BY_ARTIST'),
-				type => 'link',
-				url  => \&artistLetterListHandler,
+				name        => cstring($client, 'PLUGIN_ARCHIVELMA_BY_ARTIST'),
+				type        => 'link',
+				url         => \&letterListHandler,
+				passthrough => [ { field => 'creator' } ],
+			},
+			{
+				name        => cstring($client, 'PLUGIN_ARCHIVELMA_BY_VENUE'),
+				type        => 'link',
+				url         => \&letterListHandler,
+				passthrough => [ { field => 'venue' } ],
 			},
 			{
 				name => cstring($client, 'PLUGIN_ARCHIVELMA_RECENT'),
 				type => 'link',
 				url  => \&showListHandler,
 				passthrough => [ { sort => 'addeddate desc' } ],
+			},
+			{
+				name => cstring($client, 'PLUGIN_ARCHIVELMA_RANDOM'),
+				type => 'link',
+				url  => \&randomShowHandler,
 			},
 		],
 	});
@@ -163,7 +183,7 @@ sub _yearBound {
 	my ($direction, $done) = @_;
 
 	my $url = SEARCH_URL . '?' . join('&',
-		'q=' . uri_escape_utf8('collection:' . _collection()),
+		'q=' . uri_escape_utf8(_baseQuery()),
 		'rows=1',
 		'output=json',
 		'fl[]=year',
@@ -187,28 +207,31 @@ sub _yearError {
 	$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 }
 
-# ~1,800 distinct artists is too many for a flat list, so we show an A-Z
-# index first and only list the matching artists once a letter is picked.
-sub artistLetterListHandler {
-	my ($client, $cb, $args) = @_;
+# Thousands of distinct artists/venues is too many for a flat list, so we
+# show an A-Z index first and only list the matching values once a letter
+# is picked. Shared by "Browse by Artist" (field=creator) and "Browse by
+# Venue" (field=venue).
+sub letterListHandler {
+	my ($client, $cb, $args, $passthrough) = @_;
+	my $field = $passthrough->{field};
 
-	_withAllCreators(sub {
-		my $creators = shift;
+	_withAllValues($field, sub {
+		my $values = shift;
 
-		if (!@$creators) {
+		if (!@$values) {
 			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		}
 
 		my %counts;
-		$counts{ _letterFor($_) }++ for @$creators;
+		$counts{ _letterFor($_) }++ for @$values;
 
 		my @items = map {
 			my $letter = $_;
 			{
 				name        => "$letter ($counts{$letter})",
 				type        => 'link',
-				url         => \&artistListHandler,
-				passthrough => [ { letter => $letter } ],
+				url         => \&valueListHandler,
+				passthrough => [ { field => $field, letter => $letter } ],
 			};
 		} sort keys %counts;
 
@@ -216,22 +239,22 @@ sub artistLetterListHandler {
 	});
 }
 
-sub artistListHandler {
+sub valueListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
-	my $letter = $passthrough->{letter};
+	my ($field, $letter) = @{$passthrough}{qw(field letter)};
 
-	_withAllCreators(sub {
-		my $creators = shift;
+	_withAllValues($field, sub {
+		my $values = shift;
 
 		my @items = map {
-			my $artist = $_;
+			my $value = $_;
 			{
-				name        => $artist,
+				name        => $value,
 				type        => 'link',
 				url         => \&showListHandler,
-				passthrough => [ { query => 'creator:' . _phrase($artist), sort => 'date asc' } ],
+				passthrough => [ { query => "$field:" . _phrase($value), sort => 'date asc' } ],
 			};
-		} grep { _letterFor($_) eq $letter } @$creators;
+		} grep { _letterFor($_) eq $letter } @$values;
 
 		push @items, { name => cstring($client, 'EMPTY') } unless @items;
 
@@ -239,37 +262,38 @@ sub artistListHandler {
 	});
 }
 
-# Fetches every show's creator once, deduped and sorted - cached for a day
-# since a taper's back catalog barely changes from one day to the next.
-sub _withAllCreators {
-	my $done = shift;
+# Fetches every show's value for one field (creator or venue) once, deduped
+# and sorted - cached for a day since a taper's back catalog barely changes
+# from one day to the next.
+sub _withAllValues {
+	my ($field, $done) = @_;
 
 	my $url = SEARCH_URL . '?' . join('&',
-		'q=' . uri_escape_utf8('collection:' . _collection()),
+		'q=' . uri_escape_utf8(_baseQuery()),
 		'rows=' . ALL_ITEMS_ROWS,
 		'output=json',
-		'fl[]=creator',
+		"fl[]=$field",
 	);
 
-	_getJSON($url, { cache => 1, expires => ARTIST_CACHE_EXPIRY },
+	_getJSON($url, { cache => 1, expires => VALUE_LIST_CACHE_EXPIRY },
 		sub {
 			my $result = shift;
 
 			if (!$result->{response}) {
-				$log->error("Unexpected creator list response");
+				$log->error("Unexpected $field list response");
 				return $done->([]);
 			}
 
 			my %seen;
-			my @creators =
+			my @values =
 				sort { lc($a) cmp lc($b) }
 				grep { $_ && !$seen{$_}++ }
-				map { $_->{creator} } @{ $result->{response}{docs} };
+				map { $_->{$field} } @{ $result->{response}{docs} };
 
-			$done->(\@creators);
+			$done->(\@values);
 		},
 		sub {
-			$log->error("Failed to fetch creator list: $_[0]");
+			$log->error("Failed to fetch $field list: $_[0]");
 			$done->([]);
 		},
 	);
@@ -304,7 +328,7 @@ sub showListHandler {
 	my $quantity = $args->{quantity} || PAGE_SIZE_DEFAULT;
 	my $page     = int($index / $quantity) + 1;
 
-	my $q = 'collection:' . _collection();
+	my $q = _baseQuery();
 	$q .= ' AND (' . $opts->{query} . ')' if $opts->{query};
 
 	my @params = (
@@ -339,6 +363,7 @@ sub showListHandler {
 					name        => $doc->{title} || $doc->{identifier},
 					name2       => $subtitle,
 					type        => 'link',
+					image       => IMAGE_URL . $doc->{identifier},
 					url         => \&trackListHandler,
 					passthrough => [ { identifier => $doc->{identifier} } ],
 				};
@@ -397,6 +422,7 @@ sub trackListHandler {
 					name      => $t->{name},
 					type      => 'audio',
 					play      => DOWNLOAD_URL . $identifier . '/' . uri_escape_utf8($t->{file}),
+					image     => IMAGE_URL . $identifier,
 					duration  => $t->{duration},
 					on_select => 'play',
 				};
@@ -415,6 +441,57 @@ sub trackListHandler {
 		},
 		sub {
 			$log->error("Metadata request failed for $identifier: $_[0]");
+			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+		},
+	);
+}
+
+sub randomShowHandler {
+	my ($client, $cb, $args) = @_;
+
+	my $countUrl = SEARCH_URL . '?' . join('&',
+		'q=' . uri_escape_utf8(_baseQuery()),
+		'rows=0',
+		'output=json',
+	);
+
+	_getJSON($countUrl, { cache => 1, expires => LIST_CACHE_EXPIRY },
+		sub {
+			my $result = shift;
+			my $total  = $result->{response}{numFound};
+
+			if (!$total) {
+				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+			}
+
+			my $pickUrl = SEARCH_URL . '?' . join('&',
+				'q=' . uri_escape_utf8(_baseQuery()),
+				'rows=1',
+				'page=' . (int(rand($total)) + 1),
+				'output=json',
+				'fl[]=identifier',
+			);
+
+			# Not cached - every pick should be able to land on a different show.
+			_getJSON($pickUrl, {},
+				sub {
+					my $pickResult = shift;
+					my $identifier = $pickResult->{response}{docs}[0]{identifier};
+
+					if (!$identifier) {
+						return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+					}
+
+					trackListHandler($client, $cb, $args, { identifier => $identifier });
+				},
+				sub {
+					$log->error("Random pick request failed: $_[0]");
+					$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+				},
+			);
+		},
+		sub {
+			$log->error("Random count request failed: $_[0]");
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		},
 	);

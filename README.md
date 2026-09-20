@@ -13,13 +13,19 @@ setting — point it at any other archive.org collection identifier and it works
 
 - **Search** — full-text search across show titles, artists, and venues
 - **Browse by Year** — every year the collection spans, newest/oldest first
-- **Browse by Artist** — an A–Z index (collections with thousands of distinct artists would be
-  unusable as one flat list)
+- **Browse by Artist** and **Browse by Venue** — both as an A–Z index (collections with thousands
+  of distinct artists/venues would be unusable as one flat list)
 - **Recently Added**
+- **Random Show** — one tap to a random pick from the whole collection
 - **Play Entire Show / Add Entire Show to Queue** — one tap to queue every track of a show, not
   just individual tracks
+- Show artwork, pulled from archive.org's thumbnail service
 - Configurable collection identifier (Settings → Plugins → Live Music Archive Browser)
+- Restricted to audio items, so pointing this at a mixed-media collection won't surface
+  unplayable text/video entries
 - Automatically retries once on a transient network hiccup before showing an error
+- Individual tracks can be saved to LMS Favorites for one-tap replay later (whole-show favorites
+  aren't supported yet — see [Roadmap](#roadmap))
 
 ## Requirements
 
@@ -93,6 +99,9 @@ archive.org's API.
 
 - Get listed in the [community plugin repository](https://github.com/lms-community/lms-plugin-repository)
   so `repository.xml` isn't a manual add
+- Whole-show Favorites — LMS resolves a `link`-type favorite via a real HTTP fetch of an OPML
+  feed, not a Perl callback, so this needs a dedicated web endpoint (e.g. serving a per-show OPML
+  or M3U on demand) rather than just tagging the existing menu items
 - Optional per-collection default sort order
 
 ## License
