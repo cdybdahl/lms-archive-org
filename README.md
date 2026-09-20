@@ -1,3 +1,5 @@
+<img src="logo.png" width="96" height="96" alt="">
+
 # lms-archive-org
 
 A [Lyrion Music Server](https://lyrion.org/) (formerly Logitech Media Server / SqueezeboxServer)
