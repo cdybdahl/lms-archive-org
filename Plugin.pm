@@ -404,17 +404,24 @@ sub _withAllValues {
 	);
 }
 
+# Root-level archive.org collections worth surfacing whole, in addition to
+# etree's per-artist/taper sub-collections below - these aren't themselves
+# etree sub-collections, so collection:etree alone would never find them.
+use constant EXTRA_DISCOVER_COLLECTIONS => ('etree', 'radioprograms');
+
 # Powers the Settings > Discover panel: lists other archive.org collections
 # a user could add, so they don't have to already know an identifier to try
-# it. Restricted to collection:etree (the Live Music Archive's umbrella
-# collection of per-artist/taper sub-collections) since that's what this
-# plugin's browse-by-year/artist/venue screens are built around; an
-# arbitrary mediatype:collection search would surface mostly non-audio
-# collections. Sorted by downloads as a simple popularity signal.
+# it. Mostly collection:etree (the Live Music Archive's umbrella collection
+# of per-artist/taper sub-collections) plus EXTRA_DISCOVER_COLLECTIONS,
+# since that's what this plugin's browse-by-year/artist/venue screens are
+# built around; an arbitrary mediatype:collection search would surface
+# mostly non-audio collections. Sorted by downloads as a simple popularity
+# signal.
 sub discoverCollections {
 	my ($query, $done) = @_;
 
-	my $q = 'mediatype:collection AND collection:etree';
+	my $extraFilter = join(' OR ', map { "identifier:$_" } EXTRA_DISCOVER_COLLECTIONS);
+	my $q = "mediatype:collection AND (collection:etree OR $extraFilter)";
 
 	my $term = _sanitizeDiscoverTerm($query);
 	if (length $term) {

@@ -87,8 +87,9 @@ just Live Music Archive ones, as long as its items have audio files. Add as many
 they're merged into a single browsable catalog.
 
 Don't know an identifier off-hand? The **Discover Collections** section further down the same
-settings page lists other Live Music Archive collections by popularity, and lets you search by
-band/taper name — click **Add** on any result to add it, no need to look up the identifier
+settings page lists other collections by popularity - individual bands/tapers, plus the Live
+Music Archive (`etree`) and Radio Programs Archive (`radioprograms`) collections as a whole - and
+lets you search by name. Click **Add** on any result to add it, no need to look up the identifier
 yourself.
 
 ## How it works
