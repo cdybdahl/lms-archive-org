@@ -51,6 +51,10 @@
 				<td>[% "PLUGIN_ARCHIVELMA_ERROR" | string %]</td>
 			</tr>
 			[% ELSIF discoverResults.size %]
+			<tr>
+				<td></td>
+				<td>[% discoverCountText | html %]</td>
+			</tr>
 			[% FOREACH r = discoverResults %]
 			<tr>
 				<td>[% r.title | html %]</td>

@@ -68,12 +68,15 @@ sub handler {
 	my %added = map { $_ => 1 } @{ $params->{prefs}->{collections} };
 
 	Plugins::ArchiveLMA::Plugin::discoverCollections($query, sub {
-		my $results = shift;
+		my $discovered = shift;
 
-		if ($results) {
+		if ($discovered) {
 			$params->{discoverResults} = [ map {
 				{ %$_, added => $added{ $_->{identifier} } ? 1 : 0 };
-			} @$results ];
+			} @{ $discovered->{results} } ];
+
+			$params->{discoverCountText} = sprintf(string('PLUGIN_ARCHIVELMA_DISCOVER_COUNT'),
+				scalar(@{ $discovered->{results} }), $discovered->{total});
 		}
 		else {
 			$params->{discoverError} = 1;

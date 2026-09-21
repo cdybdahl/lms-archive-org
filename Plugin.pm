@@ -29,7 +29,7 @@ use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist
 use constant ALL_ITEMS_ROWS          => 4000;        # comfortably above the collection's ~3400 shows
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
-use constant DISCOVER_ROWS       => 30;          # collections shown per Settings > Discover search
+use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search
 
 # Preferred playback format, in priority order - archive.org usually carries
 # the same recording in several formats and we only want one file per track.
@@ -402,13 +402,16 @@ sub discoverCollections {
 
 			my $docs = $result->{response}{docs} || [];
 
-			$done->([ map {
-				{
-					identifier => $_->{identifier},
-					title      => $_->{title} || $_->{identifier},
-					downloads  => $_->{downloads} || 0,
-				};
-			} @$docs ]);
+			$done->({
+				total   => $result->{response}{numFound} || scalar @$docs,
+				results => [ map {
+					{
+						identifier => $_->{identifier},
+						title      => $_->{title} || $_->{identifier},
+						downloads  => $_->{downloads} || 0,
+					};
+				} @$docs ],
+			});
 		},
 		sub {
 			$log->error("Discover search failed: $_[0]");

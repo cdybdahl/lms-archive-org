@@ -84,6 +84,9 @@ PLUGIN_ARCHIVELMA_DISCOVER_PLACEHOLDER
 PLUGIN_ARCHIVELMA_DISCOVER_EMPTY
 	EN	No matching collections found.
 
+PLUGIN_ARCHIVELMA_DISCOVER_COUNT
+	EN	Showing %s of %s collections - search by name to narrow it down.
+
 PLUGIN_ARCHIVELMA_ADD
 	EN	Add
 
