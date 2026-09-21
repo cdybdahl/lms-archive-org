@@ -645,9 +645,14 @@ sub _listenLaterItem {
 	my $inList = _isInListenLater($identifier);
 
 	return {
-		name => cstring($client, $inList ? 'PLUGIN_ARCHIVELMA_REMOVE_LISTEN_LATER' : 'PLUGIN_ARCHIVELMA_ADD_LISTEN_LATER'),
-		type => 'link',
-		url  => sub {
+		name       => cstring($client, $inList ? 'PLUGIN_ARCHIVELMA_REMOVE_LISTEN_LATER' : 'PLUGIN_ARCHIVELMA_ADD_LISTEN_LATER'),
+		type       => 'link',
+		# Without this, Jive-style clients (Material Skin, apps, remotes) navigate
+		# into a new screen for this action and are left looking at it empty once
+		# the showBriefly confirmation item below is stripped out for the toast -
+		# nextWindow tells them to pop back to the track list instead.
+		nextWindow => 'parent',
+		url        => sub {
 			my ($client, $cb) = @_;
 
 			if ($inList) {
@@ -666,9 +671,10 @@ sub _playAllItem {
 	my ($client, $urls) = @_;
 
 	return {
-		name => cstring($client, 'PLUGIN_ARCHIVELMA_PLAY_ALL'),
-		type => 'link',
-		url  => sub {
+		name       => cstring($client, 'PLUGIN_ARCHIVELMA_PLAY_ALL'),
+		type       => 'link',
+		nextWindow => 'nowPlaying',
+		url        => sub {
 			my ($client, $cb) = @_;
 
 			if (!$client) {
@@ -686,9 +692,10 @@ sub _addAllItem {
 	my ($client, $urls) = @_;
 
 	return {
-		name => cstring($client, 'PLUGIN_ARCHIVELMA_ADD_ALL'),
-		type => 'link',
-		url  => sub {
+		name       => cstring($client, 'PLUGIN_ARCHIVELMA_ADD_ALL'),
+		type       => 'link',
+		nextWindow => 'parent',
+		url        => sub {
 			my ($client, $cb) = @_;
 
 			if (!$client) {
