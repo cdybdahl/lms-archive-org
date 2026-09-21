@@ -24,6 +24,9 @@ local index or scheduled sync to keep in sync; every browse action queries archi
 - **Random Show** — one tap to a random pick from the whole collection
 - **Listen Later** — save whole shows to a list for one-tap return later (from a show's track
   list, not per-track)
+- **Favorites (★)** — a second, separate saved-shows list for ones you love rather than ones
+  you're queuing up; favorited shows show a ★ next to their title everywhere they appear (search,
+  browse, Listen Later), and toggling is a tap from the show's track list, same as Listen Later
 - **Play Entire Show / Add Entire Show to Queue** — one tap to queue every track of a show, not
   just individual tracks
 - Show artwork, pulled from archive.org's thumbnail service
@@ -31,8 +34,7 @@ local index or scheduled sync to keep in sync; every browse action queries archi
 - Restricted to audio items, so pointing this at a mixed-media collection won't surface
   unplayable text/video entries
 - Automatically retries once on a transient network hiccup before showing an error
-- Individual tracks can be saved to LMS Favorites for one-tap replay later (whole-show favorites
-  aren't supported yet — see [Roadmap](#roadmap))
+- Individual tracks can also be saved to LMS's own built-in Favorites for one-tap replay later
 
 ## Requirements
 
@@ -128,9 +130,10 @@ Found something? Open an issue.
 
 - [Submitted to the community plugin repository](https://github.com/LMS-Community/lms-plugin-repository/pull/83)
   so `repository.xml` isn't a manual add
-- Whole-show Favorites — LMS resolves a `link`-type favorite via a real HTTP fetch of an OPML
-  feed, not a Perl callback, so this needs a dedicated web endpoint (e.g. serving a per-show OPML
-  or M3U on demand) rather than just tagging the existing menu items
+- Integrating with LMS's own native Favorites system (long-press "Save to Favorites" on any node)
+  rather than the plugin's own separate ★ list — LMS resolves a `link`-type favorite via a real
+  HTTP fetch of an OPML feed, not a Perl callback, so this needs a dedicated web endpoint (e.g.
+  serving a per-show OPML or M3U on demand) rather than just tagging the existing menu items
 - Optional per-collection default sort order
 
 ## License

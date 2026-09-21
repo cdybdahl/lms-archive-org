@@ -51,28 +51,51 @@ sub _collections {
 	return (DEFAULT_COLLECTION);
 }
 
-sub _listenLater {
-	return $prefs->get('listenLater') || [];
+# Listen Later and Favorites are both just a named, ordered set of shows -
+# shared here so the two lists (and any future one) can't drift apart.
+sub _prefList {
+	my $key = shift;
+	return $prefs->get($key) || [];
 }
 
-sub _isInListenLater {
-	my $identifier = shift;
-	return !!grep { $_->{identifier} eq $identifier } @{ _listenLater() };
+sub _isInPrefList {
+	my ($key, $identifier) = @_;
+	return !!grep { $_->{identifier} eq $identifier } @{ _prefList($key) };
 }
 
-sub _addToListenLater {
-	my ($identifier, $name, $name2) = @_;
-	my $list = _listenLater();
+sub _addToPrefList {
+	my ($key, $identifier, $name, $name2) = @_;
+	my $list = _prefList($key);
 	return if grep { $_->{identifier} eq $identifier } @$list;
 	unshift @$list, { identifier => $identifier, name => $name, name2 => $name2 };
-	$prefs->set('listenLater', $list);
+	$prefs->set($key, $list);
 }
 
-sub _removeFromListenLater {
-	my $identifier = shift;
-	my $list = _listenLater();
+sub _removeFromPrefList {
+	my ($key, $identifier) = @_;
+	my $list = _prefList($key);
 	@$list = grep { $_->{identifier} ne $identifier } @$list;
-	$prefs->set('listenLater', $list);
+	$prefs->set($key, $list);
+}
+
+sub _listenLater          { return _prefList('listenLater') }
+sub _isInListenLater       { return _isInPrefList('listenLater', shift) }
+sub _addToListenLater      { my ($id, $name, $name2) = @_; _addToPrefList('listenLater', $id, $name, $name2) }
+sub _removeFromListenLater { return _removeFromPrefList('listenLater', shift) }
+
+sub _favorites        { return _prefList('favorites') }
+sub _isFavorite        { return _isInPrefList('favorites', shift) }
+sub _addToFavorites     { my ($id, $name, $name2) = @_; _addToPrefList('favorites', $id, $name, $name2) }
+sub _removeFromFavorites { return _removeFromPrefList('favorites', shift) }
+
+# A short mark shown right in a show's title wherever it appears in a list,
+# since there's no way in the OPML/Jive menu model to make a separate icon
+# in a row independently clickable across every kind of client - this is
+# the "visible on any show" half of favorites; toggling still happens from
+# the show's own track list screen.
+sub _favoriteMark {
+	my $identifier = shift;
+	return _isFavorite($identifier) ? "\x{2605} " : '';
 }
 
 # Restricts to playable media - matters once the collection list is
@@ -127,7 +150,7 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [] });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [] });
 
 	# One-time migration from the earlier single-collection pref.
 	$prefs->migrate(1, sub {
@@ -192,24 +215,39 @@ sub handleFeed {
 				type => 'link',
 				url  => \&listenLaterHandler,
 			},
+			{
+				name => cstring($client, 'PLUGIN_ARCHIVELMA_FAVORITES'),
+				type => 'link',
+				url  => \&favoritesHandler,
+			},
 		],
 	});
 }
 
 sub listenLaterHandler {
 	my ($client, $cb, $args) = @_;
+	_savedShowListHandler($client, $cb, _listenLater());
+}
+
+sub favoritesHandler {
+	my ($client, $cb, $args) = @_;
+	_savedShowListHandler($client, $cb, _favorites());
+}
+
+sub _savedShowListHandler {
+	my ($client, $cb, $shows) = @_;
 
 	my @items = map {
 		my $show = $_;
 		{
-			name        => $show->{name},
+			name        => _favoriteMark($show->{identifier}) . $show->{name},
 			name2       => $show->{name2},
 			type        => 'link',
 			image       => IMAGE_URL . $show->{identifier},
 			url         => \&trackListHandler,
 			passthrough => [ { identifier => $show->{identifier} } ],
 		};
-	} @{ _listenLater() };
+	} @$shows;
 
 	push @items, { name => cstring($client, 'EMPTY') } unless @items;
 
@@ -495,7 +533,7 @@ sub showListHandler {
 				$date =~ s/T.*$// if $date;
 				my $subtitle = join(' - ', grep { $_ } ($date, $doc->{venue} || $doc->{coverage}));
 				{
-					name        => $doc->{title} || $doc->{identifier},
+					name        => _favoriteMark($doc->{identifier}) . ($doc->{title} || $doc->{identifier}),
 					name2       => $subtitle,
 					type        => 'link',
 					image       => IMAGE_URL . $doc->{identifier},
@@ -572,6 +610,7 @@ sub trackListHandler {
 			if (@items) {
 				my @urls = map { $_->{play} } @items;
 				unshift @items, _listenLaterItem($client, $identifier, $showName, $showName2);
+				unshift @items, _favoriteItem($client, $identifier, $showName, $showName2);
 				unshift @items, _addAllItem($client, \@urls);
 				unshift @items, _playAllItem($client, \@urls);
 			}
@@ -637,6 +676,30 @@ sub randomShowHandler {
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		},
 	);
+}
+
+sub _favoriteItem {
+	my ($client, $identifier, $name, $name2) = @_;
+
+	my $isFavorite = _isFavorite($identifier);
+
+	return {
+		name       => cstring($client, $isFavorite ? 'PLUGIN_ARCHIVELMA_REMOVE_FAVORITE' : 'PLUGIN_ARCHIVELMA_ADD_FAVORITE'),
+		type       => 'link',
+		nextWindow => 'parent',
+		url        => sub {
+			my ($client, $cb) = @_;
+
+			if ($isFavorite) {
+				_removeFromFavorites($identifier);
+				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_REMOVED_FAVORITE'), showBriefly => 1 } ] });
+			}
+			else {
+				_addToFavorites($identifier, $name, $name2);
+				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ADDED_FAVORITE'), showBriefly => 1 } ] });
+			}
+		},
+	};
 }
 
 sub _listenLaterItem {
