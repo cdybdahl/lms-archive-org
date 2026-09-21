@@ -68,3 +68,24 @@ PLUGIN_ARCHIVELMA_PLAYING
 
 PLUGIN_ARCHIVELMA_ADDED
 	EN	Added entire show to queue
+
+PLUGIN_ARCHIVELMA_DISCOVER
+	EN	Discover Collections
+
+PLUGIN_ARCHIVELMA_DISCOVER_DESC
+	EN	Browse other archive.org Live Music Archive collections (bands and tapers) and add them with one click. Shown by popularity; search by name to narrow the list.
+
+PLUGIN_ARCHIVELMA_DISCOVER_SEARCH
+	EN	Search
+
+PLUGIN_ARCHIVELMA_DISCOVER_PLACEHOLDER
+	EN	Band or taper name...
+
+PLUGIN_ARCHIVELMA_DISCOVER_EMPTY
+	EN	No matching collections found.
+
+PLUGIN_ARCHIVELMA_ADD
+	EN	Add
+
+PLUGIN_ARCHIVELMA_ALREADY_ADDED
+	EN	Already added

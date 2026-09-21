@@ -32,4 +32,45 @@
 
 	[% END %]
 
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_DISCOVER" desc="PLUGIN_ARCHIVELMA_DISCOVER_DESC" %]
+
+		<table border="0" class="archivelma_discover">
+			<tr>
+				<td class="firstColumn prefHead">
+					[% "PLUGIN_ARCHIVELMA_DISCOVER_SEARCH" | string %]
+				</td>
+				<td>
+					<input type="text" class="stdedit" name="q" value="[% discoverQuery | html %]" size="40" placeholder="[% 'PLUGIN_ARCHIVELMA_DISCOVER_PLACEHOLDER' | string %]" />
+					<input type="submit" name="dosearch" value="[% 'PLUGIN_ARCHIVELMA_DISCOVER_SEARCH' | string %]" class="stdclick" />
+				</td>
+			</tr>
+
+			[% IF discoverError %]
+			<tr>
+				<td></td>
+				<td>[% "PLUGIN_ARCHIVELMA_ERROR" | string %]</td>
+			</tr>
+			[% ELSIF discoverResults.size %]
+			[% FOREACH r = discoverResults %]
+			<tr>
+				<td>[% r.title | html %]</td>
+				<td>
+					[% IF r.added %]
+						[% "PLUGIN_ARCHIVELMA_ALREADY_ADDED" | string %]
+					[% ELSE %]
+						<button type="submit" name="addcollection" value="[% r.identifier | html %]" class="stdclick">[% "PLUGIN_ARCHIVELMA_ADD" | string %]</button>
+					[% END %]
+				</td>
+			</tr>
+			[% END %]
+			[% ELSE %]
+			<tr>
+				<td></td>
+				<td>[% "PLUGIN_ARCHIVELMA_DISCOVER_EMPTY" | string %]</td>
+			</tr>
+			[% END %]
+		</table>
+
+	[% END %]
+
 [% PROCESS settings/footer.html %]

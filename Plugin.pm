@@ -29,6 +29,7 @@ use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist
 use constant ALL_ITEMS_ROWS          => 4000;        # comfortably above the collection's ~3400 shows
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
+use constant DISCOVER_ROWS       => 30;          # collections shown per Settings > Discover search
 
 # Preferred playback format, in priority order - archive.org usually carries
 # the same recording in several formats and we only want one file per track.
@@ -363,6 +364,71 @@ sub _withAllValues {
 			$done->([]);
 		},
 	);
+}
+
+# Powers the Settings > Discover panel: lists other archive.org collections
+# a user could add, so they don't have to already know an identifier to try
+# it. Restricted to collection:etree (the Live Music Archive's umbrella
+# collection of per-artist/taper sub-collections) since that's what this
+# plugin's browse-by-year/artist/venue screens are built around; an
+# arbitrary mediatype:collection search would surface mostly non-audio
+# collections. Sorted by downloads as a simple popularity signal.
+sub discoverCollections {
+	my ($query, $done) = @_;
+
+	my $q = 'mediatype:collection AND collection:etree';
+
+	my $term = _sanitizeDiscoverTerm($query);
+	if (length $term) {
+		$q .= ' AND (title:(' . $term . ') OR identifier:(' . $term . '))';
+	}
+
+	my $url = SEARCH_URL . '?' . join('&',
+		'q=' . uri_escape_utf8($q),
+		'rows=' . DISCOVER_ROWS,
+		'output=json',
+		'fl[]=identifier', 'fl[]=title', 'fl[]=downloads',
+		'sort[]=' . uri_escape_utf8('downloads desc'),
+	);
+
+	_getJSON($url, { cache => 1, expires => LIST_CACHE_EXPIRY },
+		sub {
+			my $result = shift;
+
+			if (!$result->{response}) {
+				$log->error("Unexpected discover response");
+				return $done->(undef);
+			}
+
+			my $docs = $result->{response}{docs} || [];
+
+			$done->([ map {
+				{
+					identifier => $_->{identifier},
+					title      => $_->{title} || $_->{identifier},
+					downloads  => $_->{downloads} || 0,
+				};
+			} @$docs ]);
+		},
+		sub {
+			$log->error("Discover search failed: $_[0]");
+			$done->(undef);
+		},
+	);
+}
+
+# Solr's query syntax has too many special characters (colons, parens,
+# boolean operators, ...) to safely pass user input through unescaped, so
+# rather than escape them all we just strip everything but the characters
+# an archive.org title or identifier could plausibly contain.
+sub _sanitizeDiscoverTerm {
+	my $term = shift;
+	return '' unless defined $term;
+
+	$term =~ s/[^A-Za-z0-9 '-]//g;
+	$term =~ s/^\s+|\s+$//g;
+
+	return $term;
 }
 
 sub _letterFor {

@@ -40,10 +40,13 @@ sub handler {
 			@$collections = grep { !$delete{$_} } @$collections;
 		}
 
-		my $new = $params->{newcollection};
-		$new =~ s/^\s+|\s+$//g if defined $new;
+		for my $candidate ($params->{newcollection}, $params->{addcollection}) {
+			next unless defined $candidate;
 
-		if (defined $new && length($new)) {
+			my $new = $candidate;
+			$new =~ s/^\s+|\s+$//g;
+			next unless length($new);
+
 			if ($new !~ VALID_IDENTIFIER) {
 				$params->{warning} .= sprintf(string('PLUGIN_ARCHIVELMA_INVALID_COLLECTION'), $new);
 			}
@@ -57,7 +60,27 @@ sub handler {
 
 	$params->{prefs}->{collections} = $prefs->get('collections') || [];
 
-	return $class->SUPER::handler($client, $params);
+	my $query = $params->{q};
+	$query = '' unless defined $query;
+	$query =~ s/^\s+|\s+$//g;
+	$params->{discoverQuery} = $query;
+
+	my %added = map { $_ => 1 } @{ $params->{prefs}->{collections} };
+
+	Plugins::ArchiveLMA::Plugin::discoverCollections($query, sub {
+		my $results = shift;
+
+		if ($results) {
+			$params->{discoverResults} = [ map {
+				{ %$_, added => $added{ $_->{identifier} } ? 1 : 0 };
+			} @$results ];
+		}
+		else {
+			$params->{discoverError} = 1;
+		}
+
+		$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+	});
 }
 
 1;
