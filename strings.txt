@@ -73,7 +73,10 @@ PLUGIN_ARCHIVELMA_ERROR
 	EN	Sorry, archive.org could not be reached. Please try again.
 
 PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX
-	EN	Too many shows (%s) across your collections to index by artist/venue reliably - try Search instead, or remove a very large collection like the whole Live Music Archive or Radio Programs Archive.
+	EN	Every one of your collections is too large to index by artist/venue reliably - try Search instead.
+
+PLUGIN_ARCHIVELMA_EXCLUDED_FROM_INDEX
+	EN	%s has too many items and was excluded from this list - try Search to find something in it.
 
 PLUGIN_ARCHIVELMA_PLAY_ALL
 	EN	Play Entire Show

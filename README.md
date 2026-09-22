@@ -20,11 +20,13 @@ local index or scheduled sync to keep in sync; every browse action queries archi
 - **Browse by Year** — every year the collection spans, newest/oldest first
 - **Browse by Artist** and **Browse by Venue** — both as an A–Z index (collections with thousands
   of distinct artists/venues would be unusable as one flat list). This index is built by scanning
-  up to 4,000 shows client-side, since archive.org's facet API doesn't support arbitrary fields
-  like creator/venue - fine for a handful of band-specific collections, but if your merged
-  collection list exceeds that (e.g. you've added the whole `etree` or `radioprograms` collection,
-  each with hundreds of thousands of items), this shows a message telling you so rather than a
-  silently wrong, badly undercounted index. Search still works fine at any size.
+  each configured collection client-side, since archive.org's facet API doesn't support arbitrary
+  fields like creator/venue - fine for individual band-specific collections, but a whole-archive
+  one like `etree` or `radioprograms` (hundreds of thousands to millions of items) can't be
+  reliably indexed this way. Rather than fail the whole index over one oversized collection, any
+  collection too large to fit the sampling budget is left out with a note in the index itself
+  ("X has too many items and was excluded from this list"); everything else is still indexed
+  normally. Search still works fine across every collection regardless of size.
 - **Recently Added**
 - **Random Show** — one tap to a random pick from the whole collection
 - **Listen Later** — save whole shows to a list for one-tap return later (from a show's track

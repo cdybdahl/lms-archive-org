@@ -26,7 +26,7 @@ use constant PAGE_SIZE_DEFAULT => 50;
 use constant LIST_CACHE_EXPIRY       => 3600;        # 1 hour for search/browse listings
 use constant META_CACHE_EXPIRY       => 86400 * 7;   # 1 week for per-show track listings
 use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist/venue lists
-use constant ALL_ITEMS_ROWS          => 4000;        # comfortably above the collection's ~3400 shows
+use constant ALL_ITEMS_ROWS          => 8000;        # budget for the artist/venue index; comfortably above a handful of band-specific collections combined, but dwarfed by whole-archive ones like etree or radioprograms
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
 use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search
@@ -105,8 +105,12 @@ sub _favoriteMark {
 # path (search, year, artist, venue, random) transparently spans all of
 # them as one merged catalog - archive.org's search index handles this
 # natively, so there's no local copy of the catalog to keep in sync.
+# $collectionsOverride lets callers scope the query to a subset of the
+# configured collections (used to exclude oversized ones from the
+# artist/venue index) - defaults to all of them.
 sub _baseQuery {
-	my @collections = _collections();
+	my $collectionsOverride = shift;
+	my @collections = $collectionsOverride ? @$collectionsOverride : _collections();
 	my $collectionFilter = '(' . join(' OR ', map { "collection:$_" } @collections) . ')';
 	return "$collectionFilter AND mediatype:(audio OR etree)";
 }
@@ -323,46 +327,113 @@ sub _yearError {
 # (e.g. after adding the whole etree or radioprograms collection) is far
 # bigger than that - archive.org's facet API rejects arbitrary fields like
 # creator/venue, so there's no cheap way to get a true distinct-value count
-# at that scale. Checking the total count first lets us show an honest
-# message instead of a wrong one.
+# at that scale. So instead of failing the whole index over one oversized
+# collection, we check each collection's size individually and just leave
+# out whichever ones don't fit, noting that in the index itself.
 sub letterListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
 	my $field = $passthrough->{field};
 
-	_totalShowCount(sub {
-		my $total = shift;
+	_collectionCounts(sub {
+		my $counts = shift;
 
-		if (!$total) {
+		if (!$counts) {
 			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		}
 
-		if ($total > ALL_ITEMS_ROWS) {
-			return $cb->({ items => [ { name => sprintf(cstring($client, 'PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX'), _withCommas($total)) } ] });
+		my ($included, $excluded) = _collectionsWithinBudget($counts);
+
+		if (!@$included) {
+			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX') } ] });
 		}
 
-		_withAllValues($field, sub {
+		_withAllValues($field, $included, sub {
 			my $values = shift;
 
 			if (!@$values) {
 				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 			}
 
-			my %counts;
-			$counts{ _letterFor($_) }++ for @$values;
+			my %letterCounts;
+			$letterCounts{ _letterFor($_) }++ for @$values;
 
 			my @items = map {
 				my $letter = $_;
 				{
-					name        => "$letter ($counts{$letter})",
+					name        => "$letter ($letterCounts{$letter})",
 					type        => 'link',
 					url         => \&valueListHandler,
-					passthrough => [ { field => $field, letter => $letter } ],
+					passthrough => [ { field => $field, letter => $letter, included => $included } ],
 				};
-			} sort keys %counts;
+			} sort keys %letterCounts;
+
+			if (@$excluded) {
+				unshift @items, { name => sprintf(cstring($client, 'PLUGIN_ARCHIVELMA_EXCLUDED_FROM_INDEX'), join(', ', @$excluded)) };
+			}
 
 			$cb->({ items => \@items });
 		});
 	});
+}
+
+# Fetches each configured collection's own item count (one cheap rows=0
+# query per collection) so letterListHandler can decide which ones fit in
+# the ALL_ITEMS_ROWS sampling budget.
+sub _collectionCounts {
+	my $done = shift;
+
+	my @collections = _collections();
+	my %counts;
+	my $remaining = scalar @collections;
+	my $failed = 0;
+
+	for my $collection (@collections) {
+		my $url = SEARCH_URL . '?' . join('&',
+			'q=' . uri_escape_utf8(_baseQuery([ $collection ])),
+			'rows=0',
+			'output=json',
+		);
+
+		_getJSON($url, { cache => 1, expires => LIST_CACHE_EXPIRY },
+			sub {
+				my $result = shift;
+				$counts{$collection} = $result->{response}{numFound} || 0;
+				$remaining--;
+				$done->($failed ? undef : \%counts) if $remaining == 0;
+			},
+			sub {
+				$log->error("Failed to fetch count for collection $collection: $_[0]");
+				$failed = 1;
+				$remaining--;
+				$done->(undef) if $remaining == 0;
+			},
+		);
+	}
+}
+
+# Greedily keeps the smallest collections (so a handful of oversized ones -
+# rather than an arbitrary subset - end up excluded) while their combined
+# size stays within ALL_ITEMS_ROWS.
+sub _collectionsWithinBudget {
+	my $counts = shift;
+
+	my @included;
+	my @excluded;
+	my $running = 0;
+
+	for my $collection (sort { $counts->{$a} <=> $counts->{$b} } keys %$counts) {
+		my $count = $counts->{$collection};
+
+		if ($running + $count <= ALL_ITEMS_ROWS) {
+			push @included, $collection;
+			$running += $count;
+		}
+		else {
+			push @excluded, $collection;
+		}
+	}
+
+	return (\@included, \@excluded);
 }
 
 # Cheap rows=0 count query, shared by anything that just needs the merged
@@ -390,9 +461,9 @@ sub _totalShowCount {
 
 sub valueListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
-	my ($field, $letter) = @{$passthrough}{qw(field letter)};
+	my ($field, $letter, $included) = @{$passthrough}{qw(field letter included)};
 
-	_withAllValues($field, sub {
+	_withAllValues($field, $included, sub {
 		my $values = shift;
 
 		my @items = map {
@@ -415,10 +486,10 @@ sub valueListHandler {
 # and sorted - cached for a day since a taper's back catalog barely changes
 # from one day to the next.
 sub _withAllValues {
-	my ($field, $done) = @_;
+	my ($field, $collections, $done) = @_;
 
 	my $url = SEARCH_URL . '?' . join('&',
-		'q=' . uri_escape_utf8(_baseQuery()),
+		'q=' . uri_escape_utf8(_baseQuery($collections)),
 		'rows=' . ALL_ITEMS_ROWS,
 		'output=json',
 		"fl[]=$field",
@@ -521,12 +592,6 @@ sub _sanitizeDiscoverTerm {
 	$term =~ s/^\s+|\s+$//g;
 
 	return $term;
-}
-
-sub _withCommas {
-	my $n = reverse shift;
-	$n =~ s/(\d{3})(?=\d)/$1,/g;
-	return scalar reverse $n;
 }
 
 sub _letterFor {
