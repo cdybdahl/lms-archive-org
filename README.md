@@ -19,14 +19,17 @@ local index or scheduled sync to keep in sync; every browse action queries archi
 - **Search** — full-text search across show titles, artists, and venues
 - **Browse by Year** — every year the collection spans, newest/oldest first
 - **Browse by Artist** and **Browse by Venue** — both as an A–Z index (collections with thousands
-  of distinct artists/venues would be unusable as one flat list). This index is built by scanning
-  each configured collection client-side, since archive.org's facet API doesn't support arbitrary
-  fields like creator/venue - fine for individual band-specific collections, but a whole-archive
-  one like `etree` or `radioprograms` (hundreds of thousands to millions of items) can't be
-  reliably indexed this way. Rather than fail the whole index over one oversized collection, any
-  collection too large to fit the sampling budget is left out with a note in the index itself
-  ("X has too many items and was excluded from this list"); everything else is still indexed
-  normally. Search still works fine across every collection regardless of size.
+  of distinct artists/venues would be unusable as one flat list). archive.org's facet API doesn't
+  support arbitrary fields like creator/venue, so this index is built by fully enumerating every
+  matching show via their Scraping API - fine for individual band-specific collections, but a
+  whole-archive one like `etree` (roughly 295,000 items) can take several minutes to fully index.
+  That build always runs in the background - once shortly after the server starts, then daily, and
+  immediately after you change your collection list in Settings - so an interactive Browse by
+  Artist/Venue tap never has to wait on it; it just uses whatever's already been indexed, and says
+  so if that's still in progress. A collection too large to index even in the background (like the
+  ~5 million item Radio Programs Archive) is left out with a note in the index itself instead of
+  blocking the rest ("X has too many items and was excluded from this list"). Search still works
+  fine across every collection regardless of size.
 - **Recently Added**
 - **Random Show** — one tap to a random pick from the whole collection
 - **Listen Later** — save whole shows to a list for one-tap return later (from a show's track

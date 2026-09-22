@@ -19,6 +19,7 @@ use Time::HiRes;
 
 use constant DEFAULT_COLLECTION => 'aadamjacobs';
 use constant SEARCH_URL        => 'https://archive.org/advancedsearch.php';
+use constant SCRAPE_URL        => 'https://archive.org/services/search/v1/scrape';
 use constant METADATA_URL      => 'https://archive.org/metadata/';
 use constant DOWNLOAD_URL      => 'https://archive.org/download/';
 use constant IMAGE_URL         => 'https://archive.org/services/img/';
@@ -26,7 +27,11 @@ use constant PAGE_SIZE_DEFAULT => 50;
 use constant LIST_CACHE_EXPIRY       => 3600;        # 1 hour for search/browse listings
 use constant META_CACHE_EXPIRY       => 86400 * 7;   # 1 week for per-show track listings
 use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist/venue lists
-use constant ALL_ITEMS_ROWS          => 8000;        # budget for the artist/venue index; comfortably above a handful of band-specific collections combined, but dwarfed by whole-archive ones like etree or radioprograms
+use constant SCRAPE_PAGE_SIZE   => 10000;                              # items per scrape request
+use constant MAX_SCRAPE_PAGES   => 40;                                 # safety cap on a full enumeration
+use constant INDEX_BUDGET_ITEMS => SCRAPE_PAGE_SIZE * MAX_SCRAPE_PAGES; # ~400k - covers etree (~295k), well short of radioprograms (~5M)
+use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server start before the first background build
+use constant INDEX_PREWARM_INTERVAL      => 82800;   # 23h - refreshes just under VALUE_LIST_CACHE_EXPIRY
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
 use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search
@@ -42,6 +47,14 @@ my $log = Slim::Utils::Log->addLogCategory({
 });
 
 my $prefs = preferences('plugin.archivelma');
+
+# In-memory only (not persisted): the built artist/venue index, keyed by
+# field ('creator'/'venue'). Rebuilt in the background - see
+# _prewarmValueIndexes - so an interactive Browse by Artist/Venue tap never
+# has to wait on the several-minutes-long full scrape a large collection
+# like etree needs.
+my %valueIndex;
+my $indexBuildInFlight = 0;
 
 sub getDisplayName { 'PLUGIN_ARCHIVELMA' }
 
@@ -168,6 +181,8 @@ sub initPlugin {
 		require Plugins::ArchiveLMA::Settings;
 		Plugins::ArchiveLMA::Settings->new();
 	}
+
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + INDEX_PREWARM_STARTUP_DELAY, \&_prewarmValueIndexes);
 
 	$class->SUPER::initPlugin(
 		feed   => \&handleFeed,
@@ -321,64 +336,100 @@ sub _yearError {
 # is picked. Shared by "Browse by Artist" (field=creator) and "Browse by
 # Venue" (field=venue).
 #
-# _withAllValues only ever looks at the first ALL_ITEMS_ROWS matching shows,
-# which is fine for a handful of band-specific collections but silently
-# produces a near-random, badly undercounted index once the merged catalog
-# (e.g. after adding the whole etree or radioprograms collection) is far
-# bigger than that - archive.org's facet API rejects arbitrary fields like
-# creator/venue, so there's no cheap way to get a true distinct-value count
-# at that scale. So instead of failing the whole index over one oversized
-# collection, we check each collection's size individually and just leave
-# out whichever ones don't fit, noting that in the index itself.
+# The index itself is never built inline here - a collection the size of
+# etree needs dozens of sequential archive.org scrape requests (its own
+# facet API rejects arbitrary fields like creator/venue, so there's no
+# cheap way to get this data any other way), which can take several
+# minutes. _ensureValueIndex only ever reads whatever _prewarmValueIndexes
+# has already built in the background; if that isn't ready yet it says so
+# instead of making this interactive request hang.
 sub letterListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
 	my $field = $passthrough->{field};
+
+	_ensureValueIndex($field, sub {
+		my ($index, $excluded, $included) = @_;
+
+		if (!$index) {
+			return $cb->({ items => [ { name => cstring($client, _notReadyMessageKey($included)) } ] });
+		}
+
+		my $values = $index->{values};
+
+		if (!@$values) {
+			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+		}
+
+		my %letterCounts;
+		$letterCounts{ _letterFor($_) }++ for @$values;
+
+		my @items = map {
+			my $letter = $_;
+			{
+				name        => "$letter ($letterCounts{$letter})",
+				type        => 'link',
+				url         => \&valueListHandler,
+				passthrough => [ { field => $field, letter => $letter } ],
+			};
+		} sort keys %letterCounts;
+
+		if (@$excluded) {
+			unshift @items, { name => sprintf(cstring($client, 'PLUGIN_ARCHIVELMA_EXCLUDED_FROM_INDEX'), join(', ', @$excluded)) };
+		}
+
+		$cb->({ items => \@items });
+	});
+}
+
+# Resolves the field=>index lookup for letterListHandler/valueListHandler:
+# returns the cached index if it's fresh and matches the collections that
+# currently fit the budget, otherwise kicks a background build (unless one
+# is already running) and reports "not ready" rather than waiting on it.
+sub _ensureValueIndex {
+	my ($field, $onReady) = @_;
 
 	_collectionCounts(sub {
 		my $counts = shift;
 
 		if (!$counts) {
-			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+			return $onReady->(undef, [], undef);
 		}
 
 		my ($included, $excluded) = _collectionsWithinBudget($counts);
 
 		if (!@$included) {
-			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX') } ] });
+			return $onReady->(undef, $excluded, $included);
 		}
 
-		_withAllValues($field, $included, sub {
-			my $values = shift;
+		my $cached = $valueIndex{$field};
 
-			if (!@$values) {
-				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-			}
+		if ($cached && _sameCollections($cached->{collections}, $included) && (time() - $cached->{builtAt}) < VALUE_LIST_CACHE_EXPIRY) {
+			return $onReady->($cached, $excluded, $included);
+		}
 
-			my %letterCounts;
-			$letterCounts{ _letterFor($_) }++ for @$values;
+		_buildValueIndexes($included);
 
-			my @items = map {
-				my $letter = $_;
-				{
-					name        => "$letter ($letterCounts{$letter})",
-					type        => 'link',
-					url         => \&valueListHandler,
-					passthrough => [ { field => $field, letter => $letter, included => $included } ],
-				};
-			} sort keys %letterCounts;
-
-			if (@$excluded) {
-				unshift @items, { name => sprintf(cstring($client, 'PLUGIN_ARCHIVELMA_EXCLUDED_FROM_INDEX'), join(', ', @$excluded)) };
-			}
-
-			$cb->({ items => \@items });
-		});
+		$onReady->(undef, $excluded, $included);
 	});
 }
 
+sub _notReadyMessageKey {
+	my $included = shift;
+	return !defined($included) ? 'PLUGIN_ARCHIVELMA_ERROR'
+		: @$included          ? 'PLUGIN_ARCHIVELMA_INDEX_BUILDING'
+		:                       'PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX';
+}
+
+sub _sameCollections {
+	my ($a, $b) = @_;
+	return 0 if @$a != @$b;
+	my %seen = map { $_ => 1 } @$a;
+	return !grep { !$seen{$_} } @$b;
+}
+
 # Fetches each configured collection's own item count (one cheap rows=0
-# query per collection) so letterListHandler can decide which ones fit in
-# the ALL_ITEMS_ROWS sampling budget.
+# query per collection) so we can decide which ones fit in the
+# INDEX_BUDGET_ITEMS sampling budget.
 sub _collectionCounts {
 	my $done = shift;
 
@@ -413,7 +464,11 @@ sub _collectionCounts {
 
 # Greedily keeps the smallest collections (so a handful of oversized ones -
 # rather than an arbitrary subset - end up excluded) while their combined
-# size stays within ALL_ITEMS_ROWS.
+# size stays within INDEX_BUDGET_ITEMS. This is a conservative estimate: a
+# show that's in more than one selected collection (e.g. a lot of band
+# collections are also tagged collection:etree) gets counted once per
+# collection here even though the real scrape below only visits it once,
+# so this can under-fill the budget slightly but never over-fill it.
 sub _collectionsWithinBudget {
 	my $counts = shift;
 
@@ -424,7 +479,7 @@ sub _collectionsWithinBudget {
 	for my $collection (sort { $counts->{$a} <=> $counts->{$b} } keys %$counts) {
 		my $count = $counts->{$collection};
 
-		if ($running + $count <= ALL_ITEMS_ROWS) {
+		if ($running + $count <= INDEX_BUDGET_ITEMS) {
 			push @included, $collection;
 			$running += $count;
 		}
@@ -461,10 +516,14 @@ sub _totalShowCount {
 
 sub valueListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
-	my ($field, $letter, $included) = @{$passthrough}{qw(field letter included)};
+	my ($field, $letter) = @{$passthrough}{qw(field letter)};
 
-	_withAllValues($field, $included, sub {
-		my $values = shift;
+	_ensureValueIndex($field, sub {
+		my ($index, $excluded, $included) = @_;
+
+		if (!$index) {
+			return $cb->({ items => [ { name => cstring($client, _notReadyMessageKey($included)) } ] });
+		}
 
 		my @items = map {
 			my $value = $_;
@@ -474,7 +533,7 @@ sub valueListHandler {
 				url         => \&showListHandler,
 				passthrough => [ { query => "$field:" . _phrase($value), sort => 'date asc' } ],
 			};
-		} grep { _letterFor($_) eq $letter } @$values;
+		} grep { _letterFor($_) eq $letter } @{ $index->{values} };
 
 		push @items, { name => cstring($client, 'EMPTY') } unless @items;
 
@@ -482,41 +541,104 @@ sub valueListHandler {
 	});
 }
 
-# Fetches every show's value for one field (creator or venue) once, deduped
-# and sorted - cached for a day since a taper's back catalog barely changes
-# from one day to the next.
-sub _withAllValues {
-	my ($field, $collections, $done) = @_;
+# Rebuilds both the creator and venue indexes for $collections, in a single
+# full pass over every matching show via archive.org's Scraping API (the
+# only way to enumerate past its 10,000-result advancedsearch cap). Only
+# ever called from the background (_prewarmValueIndexes / a collections
+# change in Settings) - never from an interactive request, since a
+# collection the size of etree can take several minutes to fully scrape.
+sub _buildValueIndexes {
+	my $collections = shift;
 
-	my $url = SEARCH_URL . '?' . join('&',
-		'q=' . uri_escape_utf8(_baseQuery($collections)),
-		'rows=' . ALL_ITEMS_ROWS,
-		'output=json',
-		"fl[]=$field",
-	);
+	return if $indexBuildInFlight;
+	$indexBuildInFlight = 1;
 
-	_getJSON($url, { cache => 1, expires => VALUE_LIST_CACHE_EXPIRY },
-		sub {
-			my $result = shift;
+	my $q = _baseQuery($collections);
+	my (%seen, %values);
 
-			if (!$result->{response}) {
-				$log->error("Unexpected $field list response");
-				return $done->([]);
-			}
+	my $fetchPage;
+	$fetchPage = sub {
+		my $cursor = shift;
 
-			my %seen;
-			my @values =
-				sort { lc($a) cmp lc($b) }
-				grep { $_ && !$seen{$_}++ }
-				map { $_->{$field} } @{ $result->{response}{docs} };
+		my @params = (
+			'q=' . uri_escape_utf8($q),
+			'fields=creator,venue',
+			'count=' . SCRAPE_PAGE_SIZE,
+		);
+		push @params, 'cursor=' . uri_escape_utf8($cursor) if $cursor;
 
-			$done->(\@values);
-		},
-		sub {
-			$log->error("Failed to fetch $field list: $_[0]");
-			$done->([]);
-		},
-	);
+		my $url = SCRAPE_URL . '?' . join('&', @params);
+
+		_getJSON($url, { cache => 1, expires => VALUE_LIST_CACHE_EXPIRY },
+			sub {
+				my $result = shift;
+				my $items = $result->{items} || [];
+
+				for my $item (@$items) {
+					for my $field (qw(creator venue)) {
+						my $value = $item->{$field};
+						next unless defined $value && length $value;
+						push @{ $values{$field} }, $value unless $seen{$field}{$value}++;
+					}
+				}
+
+				if ($result->{cursor} && @$items) {
+					$fetchPage->($result->{cursor});
+				}
+				else {
+					_storeValueIndexes($collections, \%values);
+				}
+			},
+			sub {
+				$log->error("Scrape page failed while building artist/venue index: $_[0]");
+				_storeValueIndexes($collections, \%values);
+			},
+		);
+	};
+
+	$fetchPage->(undef);
+}
+
+sub _storeValueIndexes {
+	my ($collections, $values) = @_;
+
+	my $now = time();
+
+	for my $field (qw(creator venue)) {
+		$valueIndex{$field} = {
+			collections => $collections,
+			values      => [ sort { lc($a) cmp lc($b) } @{ $values->{$field} || [] } ],
+			builtAt     => $now,
+		};
+	}
+
+	$indexBuildInFlight = 0;
+}
+
+# Runs once shortly after startup and then every INDEX_PREWARM_INTERVAL, so
+# the artist/venue index is normally already warm by the time anyone taps
+# Browse by Artist/Venue.
+sub _prewarmValueIndexes {
+	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + INDEX_PREWARM_INTERVAL, \&_prewarmValueIndexes);
+
+	_collectionCounts(sub {
+		my $counts = shift;
+		return unless $counts;
+
+		my ($included) = _collectionsWithinBudget($counts);
+		return unless @$included;
+
+		_buildValueIndexes($included);
+	});
+}
+
+# Called by Settings.pm when the collection list changes, so the index
+# reflects it well before the next scheduled prewarm.
+sub rebuildValueIndexSoon {
+	%valueIndex = ();
+	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 5, \&_prewarmValueIndexes);
 }
 
 # Root-level archive.org collections worth surfacing whole, in addition to

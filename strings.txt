@@ -78,6 +78,9 @@ PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX
 PLUGIN_ARCHIVELMA_EXCLUDED_FROM_INDEX
 	EN	%s has too many items and was excluded from this list - try Search to find something in it.
 
+PLUGIN_ARCHIVELMA_INDEX_BUILDING
+	EN	Still building the artist/venue index for your collections - this can take a few minutes for a very large one. Try again shortly, or use Search in the meantime.
+
 PLUGIN_ARCHIVELMA_PLAY_ALL
 	EN	Play Entire Show
 

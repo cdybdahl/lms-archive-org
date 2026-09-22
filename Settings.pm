@@ -33,6 +33,7 @@ sub handler {
 
 	if ($params->{saveSettings}) {
 		my $collections = $prefs->get('collections') || [];
+		my @before = @$collections;
 
 		my @delete = @{ ref $params->{delete} eq 'ARRAY' ? $params->{delete} : [ $params->{delete} ] };
 		if (@delete) {
@@ -56,6 +57,10 @@ sub handler {
 		}
 
 		$prefs->set('collections', $collections);
+
+		if (join("\x00", sort @before) ne join("\x00", sort @$collections)) {
+			Plugins::ArchiveLMA::Plugin::rebuildValueIndexSoon();
+		}
 	}
 
 	$params->{prefs}->{collections} = $prefs->get('collections') || [];
