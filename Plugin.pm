@@ -16,6 +16,7 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(cstring);
 use Slim::Utils::Timers;
 use Time::HiRes;
+use Time::Local qw(timelocal);
 
 use constant DEFAULT_COLLECTION => 'aadamjacobs';
 use constant SEARCH_URL        => 'https://archive.org/advancedsearch.php';
@@ -30,8 +31,8 @@ use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist
 use constant SCRAPE_PAGE_SIZE   => 10000;                              # items per scrape request
 use constant MAX_SCRAPE_PAGES   => 40;                                 # safety cap on a full enumeration
 use constant INDEX_BUDGET_ITEMS => SCRAPE_PAGE_SIZE * MAX_SCRAPE_PAGES; # ~400k - covers etree (~295k), well short of radioprograms (~5M)
-use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server start before the first background build
-use constant INDEX_PREWARM_INTERVAL      => 82800;   # 23h - refreshes just under VALUE_LIST_CACHE_EXPIRY
+use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server start before the first background build, so a fresh install/restart isn't left with an empty index until the next scheduled hour
+use constant DEFAULT_INDEX_REBUILD_HOUR  => 4;       # 4am local, as a quiet-hours default for the daily rebuild
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
 use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search
@@ -167,7 +168,7 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [] });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR });
 
 	# One-time migration from the earlier single-collection pref.
 	$prefs->migrate(1, sub {
@@ -615,12 +616,27 @@ sub _storeValueIndexes {
 	$indexBuildInFlight = 0;
 }
 
-# Runs once shortly after startup and then every INDEX_PREWARM_INTERVAL, so
-# the artist/venue index is normally already warm by the time anyone taps
-# Browse by Artist/Venue.
+# Epoch for the next occurrence of the user's chosen local hour (Settings >
+# "Rebuild artist/venue index at"), today if it hasn't passed yet, else
+# tomorrow.
+sub _nextScheduledRun {
+	my $hour = $prefs->get('indexRebuildHour');
+	$hour = DEFAULT_INDEX_REBUILD_HOUR unless defined $hour && $hour =~ /^\d+$/ && $hour <= 23;
+
+	my @now = localtime(time());
+	my $next = timelocal(0, 0, $hour, $now[3], $now[4], $now[5]);
+	$next += 86400 if $next <= time();
+
+	return $next;
+}
+
+# Runs once shortly after startup (so a fresh install/restart isn't left
+# with an empty index for up to a day) and then every day at the user's
+# chosen local hour, so the artist/venue index is normally already warm by
+# the time anyone taps Browse by Artist/Venue.
 sub _prewarmValueIndexes {
 	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
-	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + INDEX_PREWARM_INTERVAL, \&_prewarmValueIndexes);
+	Slim::Utils::Timers::setTimer(undef, _nextScheduledRun(), \&_prewarmValueIndexes);
 
 	_collectionCounts(sub {
 		my $counts = shift;
@@ -634,11 +650,18 @@ sub _prewarmValueIndexes {
 }
 
 # Called by Settings.pm when the collection list changes, so the index
-# reflects it well before the next scheduled prewarm.
+# reflects it soon rather than waiting for the next scheduled hour.
 sub rebuildValueIndexSoon {
 	%valueIndex = ();
 	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
 	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 5, \&_prewarmValueIndexes);
+}
+
+# Called by Settings.pm when the rebuild hour preference changes, so the
+# new time takes effect immediately rather than after the next rebuild.
+sub rescheduleIndexPrewarm {
+	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
+	Slim::Utils::Timers::setTimer(undef, _nextScheduledRun(), \&_prewarmValueIndexes);
 }
 
 # Root-level archive.org collections worth surfacing whole, in addition to

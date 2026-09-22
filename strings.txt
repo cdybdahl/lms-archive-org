@@ -12,6 +12,12 @@ PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS
 PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC
 	EN	The archive.org collections to browse, merged into one catalog. Find each identifier in its collection's URL: archive.org/details/&lt;identifier&gt;.
 
+PLUGIN_ARCHIVELMA_REBUILD_HOUR
+	EN	Rebuild Artist/Venue Index At
+
+PLUGIN_ARCHIVELMA_REBUILD_HOUR_DESC
+	EN	The local time of day to rebuild the Browse by Artist/Venue index in the background. A large collection like the whole Live Music Archive can take several minutes to fully index, so picking a quiet hour keeps it off any time you're likely to be listening. Also runs once shortly after the server starts, and again shortly after you change your collection list above.
+
 PLUGIN_ARCHIVELMA_ADD_COLLECTION
 	EN	Add a collection
 

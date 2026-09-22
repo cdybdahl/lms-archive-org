@@ -23,7 +23,8 @@ local index or scheduled sync to keep in sync; every browse action queries archi
   support arbitrary fields like creator/venue, so this index is built by fully enumerating every
   matching show via their Scraping API - fine for individual band-specific collections, but a
   whole-archive one like `etree` (roughly 295,000 items) can take several minutes to fully index.
-  That build always runs in the background - once shortly after the server starts, then daily, and
+  That build always runs in the background - once shortly after the server starts, then daily at a
+  time you choose (Settings → **Rebuild Artist/Venue Index At**, default 4am local), and
   immediately after you change your collection list in Settings - so an interactive Browse by
   Artist/Venue tap never has to wait on it; it just uses whatever's already been indexed, and says
   so if that's still in progress. A collection too large to index even in the background (like the

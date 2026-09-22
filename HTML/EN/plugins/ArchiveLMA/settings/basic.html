@@ -32,6 +32,16 @@
 
 	[% END %]
 
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_REBUILD_HOUR" desc="PLUGIN_ARCHIVELMA_REBUILD_HOUR_DESC" %]
+
+		<select name="pref_indexRebuildHour">
+			[% FOREACH opt = hourOptions %]
+			<option value="[% opt.value %]"[% IF opt.value == prefs.pref_indexRebuildHour %] selected[% END %]>[% opt.label %]</option>
+			[% END %]
+		</select>
+
+	[% END %]
+
 	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_DISCOVER" desc="PLUGIN_ARCHIVELMA_DISCOVER_DESC" %]
 
 		<table border="0" class="archivelma_discover">

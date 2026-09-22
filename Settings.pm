@@ -23,13 +23,18 @@ sub page {
 
 # The collection list is managed by hand below rather than through the
 # generic pref_* auto-save mechanism, since it's a variable-length list
-# rather than a single value.
+# rather than a single value. indexRebuildHour is a plain scalar, so it
+# uses the generic mechanism (the "pref_indexRebuildHour" field in
+# basic.html) rather than needing its own hand-rolled handling.
 sub prefs {
-	return ($prefs);
+	return ($prefs, qw(indexRebuildHour));
 }
 
 sub handler {
 	my ($class, $client, $params, $callback, @args) = @_;
+
+	my $oldRebuildHour = $prefs->get('indexRebuildHour');
+	my $collectionsChanged = 0;
 
 	if ($params->{saveSettings}) {
 		my $collections = $prefs->get('collections') || [];
@@ -59,11 +64,17 @@ sub handler {
 		$prefs->set('collections', $collections);
 
 		if (join("\x00", sort @before) ne join("\x00", sort @$collections)) {
+			$collectionsChanged = 1;
 			Plugins::ArchiveLMA::Plugin::rebuildValueIndexSoon();
 		}
 	}
 
 	$params->{prefs}->{collections} = $prefs->get('collections') || [];
+
+	$params->{hourOptions} = [ map {
+		my $h = $_;
+		{ value => $h, label => sprintf('%d:00 %s', ($h % 12 == 0 ? 12 : $h % 12), $h < 12 ? 'AM' : 'PM') };
+	} 0..23 ];
 
 	my $query = $params->{q};
 	$query = '' unless defined $query;
@@ -87,7 +98,18 @@ sub handler {
 			$params->{discoverError} = 1;
 		}
 
-		$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+		my $body = $class->SUPER::handler($client, $params);
+
+		if (!$collectionsChanged && $params->{saveSettings} && defined $params->{pref_indexRebuildHour}
+			&& $params->{pref_indexRebuildHour} != ($oldRebuildHour // -1))
+		{
+			# Only reschedule for the new hour here if rebuildValueIndexSoon()
+			# above didn't already arm a sooner one-off rebuild - otherwise
+			# this would overwrite that with a possibly much-later time.
+			Plugins::ArchiveLMA::Plugin::rescheduleIndexPrewarm();
+		}
+
+		$callback->($client, $params, $body, @args);
 	});
 }
 

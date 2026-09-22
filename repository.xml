@@ -4,15 +4,15 @@
 		<title lang="EN">lms-archive-org</title>
 	</details>
 	<plugins>
-		<plugin name="ArchiveLMA" version="1.17" minTarget="7.0" maxTarget="*">
+		<plugin name="ArchiveLMA" version="1.18" minTarget="7.0" maxTarget="*">
 			<title lang="EN">Archive.org Browser</title>
 			<desc lang="EN">Browse and stream one or more archive.org collections as a single merged catalog (defaults to the Aadam Jacobs Live Music Archive collection; configurable in Settings)</desc>
 			<creator>Chad Dybdahl</creator>
 			<category>musicservices</category>
 			<icon>https://github.com/cdybdahl/lms-archive-org/releases/download/v1.7/icon.png</icon>
 			<link>https://github.com/cdybdahl/lms-archive-org</link>
-			<url>https://github.com/cdybdahl/lms-archive-org/releases/download/v1.17/ArchiveLMA-1.17.zip</url>
-			<sha>89f43ee2679e7ce63c5b926db8b9513bd58ca944</sha>
+			<url>https://github.com/cdybdahl/lms-archive-org/releases/download/v1.18/ArchiveLMA-1.18.zip</url>
+			<sha>22b5bc623d52e0283021e6aea3ad73b3a8c0de4b</sha>
 		</plugin>
 	</plugins>
 </extensions>
