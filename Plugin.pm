@@ -35,7 +35,18 @@ use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server star
 use constant DEFAULT_INDEX_REBUILD_HOUR  => 4;       # 4am local, as a quiet-hours default for the daily rebuild
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
-use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search
+use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search page
+
+# Sort options for Settings > Discover. "downloads" is archive.org's all-time
+# cumulative count - a 20-year-old one-time spike can outrank something far
+# more popular today, so week/month (trailing 7/30-day downloads) are
+# offered as a "what's popular right now" alternative.
+use constant DISCOVER_SORTS => {
+	downloads => 'downloads desc',
+	week      => 'week desc',
+	month     => 'month desc',
+};
+use constant DEFAULT_DISCOVER_SORT => 'downloads';
 
 # Preferred playback format, in priority order - archive.org usually carries
 # the same recording in several formats and we only want one file per track.
@@ -678,7 +689,10 @@ use constant EXTRA_DISCOVER_COLLECTIONS => ('etree', 'radioprograms');
 # mostly non-audio collections. Sorted by downloads as a simple popularity
 # signal.
 sub discoverCollections {
-	my ($query, $done) = @_;
+	my ($query, $sortKey, $page, $done) = @_;
+
+	$sortKey = DEFAULT_DISCOVER_SORT unless $sortKey && DISCOVER_SORTS->{$sortKey};
+	$page = 1 unless $page && $page =~ /^\d+$/ && $page >= 1;
 
 	my $extraFilter = join(' OR ', map { "identifier:$_" } EXTRA_DISCOVER_COLLECTIONS);
 	my $q = "mediatype:collection AND (collection:etree OR $extraFilter)";
@@ -691,9 +705,10 @@ sub discoverCollections {
 	my $url = SEARCH_URL . '?' . join('&',
 		'q=' . uri_escape_utf8($q),
 		'rows=' . DISCOVER_ROWS,
+		'page=' . $page,
 		'output=json',
 		'fl[]=identifier', 'fl[]=title', 'fl[]=downloads',
-		'sort[]=' . uri_escape_utf8('downloads desc'),
+		'sort[]=' . uri_escape_utf8(DISCOVER_SORTS->{$sortKey}),
 	);
 
 	_getJSON($url, { cache => 1, expires => LIST_CACHE_EXPIRY },
@@ -709,6 +724,8 @@ sub discoverCollections {
 
 			$done->({
 				total   => $result->{response}{numFound} || scalar @$docs,
+				sortKey => $sortKey,
+				page    => $page,
 				results => [ map {
 					{
 						identifier => $_->{identifier},

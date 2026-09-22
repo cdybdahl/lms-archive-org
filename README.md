@@ -113,10 +113,16 @@ just Live Music Archive ones, as long as its items have audio files. Add as many
 they're merged into a single browsable catalog.
 
 Don't know an identifier off-hand? The **Discover Collections** section further down the same
-settings page lists other collections by popularity - individual bands/tapers, plus the Live
-Music Archive (`etree`) and Radio Programs Archive (`radioprograms`) collections as a whole - and
-lets you search by name. Click **Add** on any result to add it, no need to look up the identifier
-yourself.
+settings page lists other collections - individual bands/tapers, plus the Live Music Archive
+(`etree`) and Radio Programs Archive (`radioprograms`) collections as a whole - and lets you
+search by name and page through the full list (100 at a time). Click **Add** on any result to add
+it, no need to look up the identifier yourself.
+
+By default results are sorted by all-time downloads, but that can be a poor "popularity" signal
+for a collection that's been on archive.org for 20 years - a one-time old spike can outrank
+something far more active today. The **Sort By** control also offers **Trending (Past Week)** and
+**Popular (Past Month)**, based on archive.org's own trailing download counts, for a better sense
+of what's actually getting listened to right now.
 
 ## How it works
 

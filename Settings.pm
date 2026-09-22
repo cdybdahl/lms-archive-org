@@ -81,9 +81,29 @@ sub handler {
 	$query =~ s/^\s+|\s+$//g;
 	$params->{discoverQuery} = $query;
 
+	my $sortKey = $params->{sort};
+
+	# Explicit Previous/Next navigation always wins. Otherwise, adding a
+	# collection stays on whatever page it was clicked from (discoverCurrentPage,
+	# a hidden field carrying the page that was rendered); any other submission
+	# (a new search, a sort change, saving the collection list, ...) resets to
+	# page 1, since the underlying result set may well be different now.
+	my $page;
+	if (defined $params->{discoverGoto} && $params->{discoverGoto} =~ /^\d+$/ && $params->{discoverGoto} >= 1) {
+		$page = $params->{discoverGoto};
+	}
+	elsif (defined $params->{addcollection} && defined $params->{discoverCurrentPage}
+		&& $params->{discoverCurrentPage} =~ /^\d+$/)
+	{
+		$page = $params->{discoverCurrentPage};
+	}
+	else {
+		$page = 1;
+	}
+
 	my %added = map { $_ => 1 } @{ $params->{prefs}->{collections} };
 
-	Plugins::ArchiveLMA::Plugin::discoverCollections($query, sub {
+	Plugins::ArchiveLMA::Plugin::discoverCollections($query, $sortKey, $page, sub {
 		my $discovered = shift;
 
 		if ($discovered) {
@@ -93,9 +113,17 @@ sub handler {
 
 			$params->{discoverCountText} = sprintf(string('PLUGIN_ARCHIVELMA_DISCOVER_COUNT'),
 				scalar(@{ $discovered->{results} }), $discovered->{total});
+
+			$params->{discoverSort}    = $discovered->{sortKey};
+			$params->{discoverPage}    = $discovered->{page};
+			$params->{discoverHasPrev} = $discovered->{page} > 1 ? 1 : 0;
+			$params->{discoverHasNext} = ($discovered->{page} * Plugins::ArchiveLMA::Plugin::DISCOVER_ROWS()) < $discovered->{total} ? 1 : 0;
+			$params->{discoverPageText} = sprintf(string('PLUGIN_ARCHIVELMA_DISCOVER_PAGE'), $discovered->{page});
 		}
 		else {
 			$params->{discoverError} = 1;
+			$params->{discoverSort}  = $sortKey || Plugins::ArchiveLMA::Plugin::DEFAULT_DISCOVER_SORT();
+			$params->{discoverPage}  = $page;
 		}
 
 		my $body = $class->SUPER::handler($client, $params);

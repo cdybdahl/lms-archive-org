@@ -44,6 +44,16 @@
 
 	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_DISCOVER" desc="PLUGIN_ARCHIVELMA_DISCOVER_DESC" %]
 
+		<input type="hidden" name="discoverCurrentPage" value="[% discoverPage %]" />
+
+		[% BLOCK discoverPager %]
+		<span class="archivelma_pager">
+			<button type="submit" name="discoverGoto" value="[% discoverPage - 1 %]" class="stdclick"[% UNLESS discoverHasPrev %] disabled[% END %]>[% "PREVIOUS" | string %]</button>
+			[% discoverPageText | html %]
+			<button type="submit" name="discoverGoto" value="[% discoverPage + 1 %]" class="stdclick"[% UNLESS discoverHasNext %] disabled[% END %]>[% "NEXT" | string %]</button>
+		</span>
+		[% END %]
+
 		<table border="0" class="archivelma_discover">
 			<tr>
 				<td class="firstColumn prefHead">
@@ -52,6 +62,18 @@
 				<td>
 					<input type="text" class="stdedit" name="q" value="[% discoverQuery | html %]" size="40" placeholder="[% 'PLUGIN_ARCHIVELMA_DISCOVER_PLACEHOLDER' | string %]" />
 					<input type="submit" name="dosearch" value="[% 'PLUGIN_ARCHIVELMA_DISCOVER_SEARCH' | string %]" class="stdclick" />
+				</td>
+			</tr>
+			<tr>
+				<td class="prefHead">
+					[% "PLUGIN_ARCHIVELMA_DISCOVER_SORT" | string %]
+				</td>
+				<td>
+					<select name="sort">
+						<option value="downloads"[% IF discoverSort == 'downloads' %] selected[% END %]>[% "PLUGIN_ARCHIVELMA_DISCOVER_SORT_DOWNLOADS" | string %]</option>
+						<option value="week"[% IF discoverSort == 'week' %] selected[% END %]>[% "PLUGIN_ARCHIVELMA_DISCOVER_SORT_WEEK" | string %]</option>
+						<option value="month"[% IF discoverSort == 'month' %] selected[% END %]>[% "PLUGIN_ARCHIVELMA_DISCOVER_SORT_MONTH" | string %]</option>
+					</select>
 				</td>
 			</tr>
 
@@ -63,7 +85,7 @@
 			[% ELSIF discoverResults.size %]
 			<tr>
 				<td></td>
-				<td>[% discoverCountText | html %]</td>
+				<td>[% discoverCountText | html %] &middot; [% PROCESS discoverPager %]</td>
 			</tr>
 			[% FOREACH r = discoverResults %]
 			<tr>
@@ -77,6 +99,10 @@
 				</td>
 			</tr>
 			[% END %]
+			<tr>
+				<td></td>
+				<td>[% PROCESS discoverPager %]</td>
+			</tr>
 			[% ELSE %]
 			<tr>
 				<td></td>
