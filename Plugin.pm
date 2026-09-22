@@ -316,32 +316,76 @@ sub _yearError {
 # show an A-Z index first and only list the matching values once a letter
 # is picked. Shared by "Browse by Artist" (field=creator) and "Browse by
 # Venue" (field=venue).
+#
+# _withAllValues only ever looks at the first ALL_ITEMS_ROWS matching shows,
+# which is fine for a handful of band-specific collections but silently
+# produces a near-random, badly undercounted index once the merged catalog
+# (e.g. after adding the whole etree or radioprograms collection) is far
+# bigger than that - archive.org's facet API rejects arbitrary fields like
+# creator/venue, so there's no cheap way to get a true distinct-value count
+# at that scale. Checking the total count first lets us show an honest
+# message instead of a wrong one.
 sub letterListHandler {
 	my ($client, $cb, $args, $passthrough) = @_;
 	my $field = $passthrough->{field};
 
-	_withAllValues($field, sub {
-		my $values = shift;
+	_totalShowCount(sub {
+		my $total = shift;
 
-		if (!@$values) {
+		if (!$total) {
 			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		}
 
-		my %counts;
-		$counts{ _letterFor($_) }++ for @$values;
+		if ($total > ALL_ITEMS_ROWS) {
+			return $cb->({ items => [ { name => sprintf(cstring($client, 'PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX'), _withCommas($total)) } ] });
+		}
 
-		my @items = map {
-			my $letter = $_;
-			{
-				name        => "$letter ($counts{$letter})",
-				type        => 'link',
-				url         => \&valueListHandler,
-				passthrough => [ { field => $field, letter => $letter } ],
-			};
-		} sort keys %counts;
+		_withAllValues($field, sub {
+			my $values = shift;
 
-		$cb->({ items => \@items });
+			if (!@$values) {
+				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+			}
+
+			my %counts;
+			$counts{ _letterFor($_) }++ for @$values;
+
+			my @items = map {
+				my $letter = $_;
+				{
+					name        => "$letter ($counts{$letter})",
+					type        => 'link',
+					url         => \&valueListHandler,
+					passthrough => [ { field => $field, letter => $letter } ],
+				};
+			} sort keys %counts;
+
+			$cb->({ items => \@items });
+		});
 	});
+}
+
+# Cheap rows=0 count query, shared by anything that just needs the merged
+# catalog's total size.
+sub _totalShowCount {
+	my $done = shift;
+
+	my $url = SEARCH_URL . '?' . join('&',
+		'q=' . uri_escape_utf8(_baseQuery()),
+		'rows=0',
+		'output=json',
+	);
+
+	_getJSON($url, { cache => 1, expires => LIST_CACHE_EXPIRY },
+		sub {
+			my $result = shift;
+			$done->($result->{response}{numFound});
+		},
+		sub {
+			$log->error("Failed to fetch total show count: $_[0]");
+			$done->(undef);
+		},
+	);
 }
 
 sub valueListHandler {
@@ -477,6 +521,12 @@ sub _sanitizeDiscoverTerm {
 	$term =~ s/^\s+|\s+$//g;
 
 	return $term;
+}
+
+sub _withCommas {
+	my $n = reverse shift;
+	$n =~ s/(\d{3})(?=\d)/$1,/g;
+	return scalar reverse $n;
 }
 
 sub _letterFor {
@@ -637,52 +687,39 @@ sub trackListHandler {
 sub randomShowHandler {
 	my ($client, $cb, $args) = @_;
 
-	my $countUrl = SEARCH_URL . '?' . join('&',
-		'q=' . uri_escape_utf8(_baseQuery()),
-		'rows=0',
-		'output=json',
-	);
+	_totalShowCount(sub {
+		my $total = shift;
 
-	_getJSON($countUrl, { cache => 1, expires => LIST_CACHE_EXPIRY },
-		sub {
-			my $result = shift;
-			my $total  = $result->{response}{numFound};
+		if (!$total) {
+			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+		}
 
-			if (!$total) {
-				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-			}
+		my $pickUrl = SEARCH_URL . '?' . join('&',
+			'q=' . uri_escape_utf8(_baseQuery()),
+			'rows=1',
+			'page=' . (int(rand($total)) + 1),
+			'output=json',
+			'fl[]=identifier',
+		);
 
-			my $pickUrl = SEARCH_URL . '?' . join('&',
-				'q=' . uri_escape_utf8(_baseQuery()),
-				'rows=1',
-				'page=' . (int(rand($total)) + 1),
-				'output=json',
-				'fl[]=identifier',
-			);
+		# Not cached - every pick should be able to land on a different show.
+		_getJSON($pickUrl, {},
+			sub {
+				my $pickResult = shift;
+				my $identifier = $pickResult->{response}{docs}[0]{identifier};
 
-			# Not cached - every pick should be able to land on a different show.
-			_getJSON($pickUrl, {},
-				sub {
-					my $pickResult = shift;
-					my $identifier = $pickResult->{response}{docs}[0]{identifier};
+				if (!$identifier) {
+					return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+				}
 
-					if (!$identifier) {
-						return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-					}
-
-					trackListHandler($client, $cb, $args, { identifier => $identifier });
-				},
-				sub {
-					$log->error("Random pick request failed: $_[0]");
-					$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-				},
-			);
-		},
-		sub {
-			$log->error("Random count request failed: $_[0]");
-			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-		},
-	);
+				trackListHandler($client, $cb, $args, { identifier => $identifier });
+			},
+			sub {
+				$log->error("Random pick request failed: $_[0]");
+				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+			},
+		);
+	});
 }
 
 sub _favoriteItem {

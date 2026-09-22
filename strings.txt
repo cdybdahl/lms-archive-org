@@ -72,6 +72,9 @@ PLUGIN_ARCHIVELMA_REMOVED_FAVORITE
 PLUGIN_ARCHIVELMA_ERROR
 	EN	Sorry, archive.org could not be reached. Please try again.
 
+PLUGIN_ARCHIVELMA_TOO_MANY_FOR_INDEX
+	EN	Too many shows (%s) across your collections to index by artist/venue reliably - try Search instead, or remove a very large collection like the whole Live Music Archive or Radio Programs Archive.
+
 PLUGIN_ARCHIVELMA_PLAY_ALL
 	EN	Play Entire Show
 
