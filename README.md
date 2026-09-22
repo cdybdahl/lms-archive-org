@@ -14,23 +14,38 @@ Year/Artist/Venue, Recently Added, and Random Show all transparently span everyt
 added, since each is just one archive.org query with the collections OR'd together. There's no
 local index or scheduled sync to keep in sync; every browse action queries archive.org live.
 
+## Now supporting the entire Live Music Archive
+
+You can add the whole [Live Music Archive](https://archive.org/details/etree) (`etree`) — not
+just individual band/taper collections — and still get full **Browse by Artist** and **Browse by
+Venue**, with every artist properly indexed. That's roughly 295,000 shows and over 8,000 distinct
+artists: far more than could ever be scanned live in response to a menu tap, and archive.org's
+facet API doesn't support fields like artist/venue, so there's no shortcut around actually
+enumerating it.
+
+To make that practical, the index is built once in the background rather than making you wait on
+it: shortly after the server starts, then automatically every day at a time you choose (Settings →
+**Rebuild Artist/Venue Index At**, default 4am local, so it doesn't run while anyone's actually
+listening), and again within a few seconds any time you change your collection list. Browse by
+Artist/Venue always uses whatever's already been built — if a big change is still being indexed,
+it just says so rather than hanging.
+
+The one exception is the Radio Programs Archive (`radioprograms`, ~5 million items) — too large
+even for the background build, so it's automatically excluded from the artist/venue index with a
+note explaining why. Search still covers it fully; it's only the A–Z browse that skips it.
+
+**To add it yourself:** Settings → Plugins → Archive.org Browser → **Discover Collections** →
+search "Live Music Archive" (or just look near the top of the popularity-sorted list) → **Add**.
+Requires v1.18 or later.
+
 ## Features
 
 - **Search** — full-text search across show titles, artists, and venues
 - **Browse by Year** — every year the collection spans, newest/oldest first
 - **Browse by Artist** and **Browse by Venue** — both as an A–Z index (collections with thousands
-  of distinct artists/venues would be unusable as one flat list). archive.org's facet API doesn't
-  support arbitrary fields like creator/venue, so this index is built by fully enumerating every
-  matching show via their Scraping API - fine for individual band-specific collections, but a
-  whole-archive one like `etree` (roughly 295,000 items) can take several minutes to fully index.
-  That build always runs in the background - once shortly after the server starts, then daily at a
-  time you choose (Settings → **Rebuild Artist/Venue Index At**, default 4am local), and
-  immediately after you change your collection list in Settings - so an interactive Browse by
-  Artist/Venue tap never has to wait on it; it just uses whatever's already been indexed, and says
-  so if that's still in progress. A collection too large to index even in the background (like the
-  ~5 million item Radio Programs Archive) is left out with a note in the index itself instead of
-  blocking the rest ("X has too many items and was excluded from this list"). Search still works
-  fine across every collection regardless of size.
+  of distinct artists/venues would be unusable as one flat list); see
+  [above](#now-supporting-the-entire-live-music-archive) for how this scales up to
+  collections as large as the entire Live Music Archive
 - **Recently Added**
 - **Random Show** — one tap to a random pick from the whole collection
 - **Listen Later** — save whole shows to a list for one-tap return later (from a show's track
