@@ -24,12 +24,12 @@ sub page {
 # The collection list, and the per-collection gain map alongside it, are
 # managed by hand below rather than through the generic pref_* auto-save
 # mechanism, since both are variable-length/keyed rather than a single
-# value. indexRebuildHour, rebuildIndexOnRestart and gainCompensationEnabled
-# are plain scalars, so they use the generic mechanism (the matching
-# "pref_*" fields in basic.html) rather than needing their own hand-rolled
-# handling.
+# value. indexRebuildHour, rebuildIndexOnRestart, gainCompensationEnabled
+# and streamingQuality are plain scalars, so they use the generic mechanism
+# (the matching "pref_*" fields in basic.html) rather than needing their own
+# hand-rolled handling.
 sub prefs {
-	return ($prefs, qw(indexRebuildHour rebuildIndexOnRestart gainCompensationEnabled));
+	return ($prefs, qw(indexRebuildHour rebuildIndexOnRestart gainCompensationEnabled streamingQuality));
 }
 
 sub handler {

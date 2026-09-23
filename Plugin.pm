@@ -54,7 +54,14 @@ use constant DEFAULT_DISCOVER_SORT => 'downloads';
 
 # Preferred playback format, in priority order - archive.org usually carries
 # the same recording in several formats and we only want one file per track.
-my @FORMAT_PRIORITY = ('VBR MP3', 'MP3', '128Kbps MP3', 'Ogg Vorbis', 'Flac');
+# Which list applies is chosen by Settings > Streaming Quality
+# (streamingQuality pref); either way, a track missing the top choice just
+# falls through to the next one that's actually available for it.
+my %FORMAT_PRIORITY = (
+	quality   => [ 'Flac', 'VBR MP3', 'MP3', '128Kbps MP3', 'Ogg Vorbis' ],
+	bandwidth => [ 'VBR MP3', 'MP3', '128Kbps MP3', 'Ogg Vorbis', 'Flac' ],
+);
+use constant DEFAULT_STREAMING_QUALITY => 'quality';
 
 my $log = Slim::Utils::Log->addLogCategory({
 	'category'     => 'plugin.archivelma',
@@ -185,7 +192,7 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR, rebuildIndexOnRestart => 0, gainCompensationEnabled => 0, collectionGains => {} });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR, rebuildIndexOnRestart => 0, gainCompensationEnabled => 0, collectionGains => {}, streamingQuality => DEFAULT_STREAMING_QUALITY });
 
 	_loadPersistedValueIndexes();
 
@@ -1166,8 +1173,12 @@ sub _gainForItem {
 
 sub _formatPriority {
 	my $format = shift // '';
-	for my $i (0 .. $#FORMAT_PRIORITY) {
-		return $i if $format eq $FORMAT_PRIORITY[$i];
+
+	my $quality = $prefs->get('streamingQuality') || DEFAULT_STREAMING_QUALITY;
+	my $order = $FORMAT_PRIORITY{$quality} || $FORMAT_PRIORITY{ +DEFAULT_STREAMING_QUALITY };
+
+	for my $i (0 .. $#$order) {
+		return $i if $format eq $order->[$i];
 	}
 	return undef;
 }

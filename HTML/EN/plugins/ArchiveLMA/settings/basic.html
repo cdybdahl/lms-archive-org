@@ -36,6 +36,15 @@
 
 	[% END %]
 
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_STREAMING_QUALITY" desc="PLUGIN_ARCHIVELMA_STREAMING_QUALITY_DESC" %]
+
+		<select name="pref_streamingQuality">
+			<option value="quality"[% IF prefs.pref_streamingQuality == 'quality' %] selected[% END %]>[% "PLUGIN_ARCHIVELMA_STREAMING_QUALITY_QUALITY" | string %]</option>
+			<option value="bandwidth"[% IF prefs.pref_streamingQuality == 'bandwidth' %] selected[% END %]>[% "PLUGIN_ARCHIVELMA_STREAMING_QUALITY_BANDWIDTH" | string %]</option>
+		</select>
+
+	[% END %]
+
 	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_GAIN_ENABLED" desc="PLUGIN_ARCHIVELMA_GAIN_ENABLED_DESC" %]
 
 		<input type="checkbox" name="pref_gainCompensationEnabled" id="pref_gainCompensationEnabled" [% IF prefs.pref_gainCompensationEnabled %] checked [% END %] value="1" />

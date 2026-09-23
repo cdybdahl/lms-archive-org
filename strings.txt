@@ -15,6 +15,18 @@ PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC
 PLUGIN_ARCHIVELMA_COLLECTION_GAIN
 	EN	Gain (dB)
 
+PLUGIN_ARCHIVELMA_STREAMING_QUALITY
+	EN	Streaming Quality
+
+PLUGIN_ARCHIVELMA_STREAMING_QUALITY_DESC
+	EN	Which format to prefer when archive.org has the same track in more than one. If your preferred format isn't available for a particular track, it automatically falls back to the next best one archive.org does have.
+
+PLUGIN_ARCHIVELMA_STREAMING_QUALITY_QUALITY
+	EN	Highest Quality (FLAC first, falls back to MP3)
+
+PLUGIN_ARCHIVELMA_STREAMING_QUALITY_BANDWIDTH
+	EN	Lowest Bandwidth (MP3 first, falls back to FLAC)
+
 PLUGIN_ARCHIVELMA_GAIN_ENABLED
 	EN	Compensate for Quiet Recordings
 
