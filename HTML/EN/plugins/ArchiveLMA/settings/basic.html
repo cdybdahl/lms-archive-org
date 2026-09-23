@@ -18,17 +18,27 @@
 					[% "PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS" | string %]
 				</td>
 				<td>
+					[% "PLUGIN_ARCHIVELMA_COLLECTION_GAIN" | string %]
+				</td>
+				<td>
 					[% "DELETE" | string %]
 				</td>
 			</tr>
 			[% FOREACH c = prefs.collections %]
 			<tr>
 				<td>[% c | html %]</td>
+				<td><input type="text" class="stdedit" name="gain_[% c | html %]" value="[% prefs.collectionGains.$c | html %]" size="4" /></td>
 				<td><input name="delete" type="checkbox" value="[% c | html %]"></td>
 			</tr>
 			[% END %]
 			[% END %]
 		</table>
+
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_GAIN_ENABLED" desc="PLUGIN_ARCHIVELMA_GAIN_ENABLED_DESC" %]
+
+		<input type="checkbox" name="pref_gainCompensationEnabled" id="pref_gainCompensationEnabled" [% IF prefs.pref_gainCompensationEnabled %] checked [% END %] value="1" />
 
 	[% END %]
 

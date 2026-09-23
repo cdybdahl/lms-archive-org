@@ -21,14 +21,15 @@ sub page {
 	return Slim::Web::HTTP::CSRF->protectURI('plugins/ArchiveLMA/settings/basic.html');
 }
 
-# The collection list is managed by hand below rather than through the
-# generic pref_* auto-save mechanism, since it's a variable-length list
-# rather than a single value. indexRebuildHour and rebuildIndexOnRestart are
-# plain scalars, so they use the generic mechanism (the "pref_indexRebuildHour"
-# and "pref_rebuildIndexOnRestart" fields in basic.html) rather than needing
-# their own hand-rolled handling.
+# The collection list, and the per-collection gain map alongside it, are
+# managed by hand below rather than through the generic pref_* auto-save
+# mechanism, since both are variable-length/keyed rather than a single
+# value. indexRebuildHour, rebuildIndexOnRestart and gainCompensationEnabled
+# are plain scalars, so they use the generic mechanism (the matching
+# "pref_*" fields in basic.html) rather than needing their own hand-rolled
+# handling.
 sub prefs {
-	return ($prefs, qw(indexRebuildHour rebuildIndexOnRestart));
+	return ($prefs, qw(indexRebuildHour rebuildIndexOnRestart gainCompensationEnabled));
 }
 
 sub handler {
@@ -72,9 +73,24 @@ sub handler {
 			Plugins::ArchiveLMA::Plugin::rebuildValueIndexSoon();
 			$params->{indexRebuildTriggered} = 1;
 		}
+
+		# One "gain_<identifier>" field per row currently shown in the
+		# collections table (see basic.html); only non-zero, numeric values
+		# are kept; a blank/zero/invalid field just means no per-collection
+		# gain applies for that collection.
+		my %gains;
+		for my $id (@$collections) {
+			my $raw = $params->{"gain_$id"};
+			next unless defined $raw;
+			$raw =~ s/^\s+|\s+$//g;
+			next unless $raw =~ /^-?\d+(?:\.\d+)?$/;
+			$gains{$id} = $raw + 0 if $raw + 0 != 0;
+		}
+		$prefs->set('collectionGains', \%gains);
 	}
 
 	$params->{prefs}->{collections} = $prefs->get('collections') || [];
+	$params->{prefs}->{collectionGains} = $prefs->get('collectionGains') || {};
 
 	$params->{hourOptions} = [ map {
 		my $h = $_;

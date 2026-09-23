@@ -12,6 +12,15 @@ PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS
 PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC
 	EN	The archive.org collections to browse, merged into one catalog. Find each identifier in its collection's URL: archive.org/details/&lt;identifier&gt;.
 
+PLUGIN_ARCHIVELMA_COLLECTION_GAIN
+	EN	Gain (dB)
+
+PLUGIN_ARCHIVELMA_GAIN_ENABLED
+	EN	Compensate for Quiet Recordings
+
+PLUGIN_ARCHIVELMA_GAIN_ENABLED_DESC
+	EN	Some archive.org collections (classical recordings especially) are mastered noticeably quieter than a typical local library - by as much as 10dB RMS. Turn this on to apply the per-collection dB boost set in the Gain column above during playback. This is independent of your player's own Replay Gain setting - it applies (or doesn't) based solely on this toggle.
+
 PLUGIN_ARCHIVELMA_REBUILD_HOUR
 	EN	Rebuild Artist/Venue Index At
 

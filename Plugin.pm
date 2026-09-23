@@ -185,9 +185,11 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR, rebuildIndexOnRestart => 0 });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR, rebuildIndexOnRestart => 0, gainCompensationEnabled => 0, collectionGains => {} });
 
 	_loadPersistedValueIndexes();
+
+	require Plugins::ArchiveLMA::ProtocolHandler;
 
 	# One-time migration from the earlier single-collection pref.
 	$prefs->migrate(1, sub {
@@ -946,6 +948,7 @@ sub trackListHandler {
 			my $showDate = $meta->{date};
 			$showDate =~ s/T.*$// if $showDate;
 			my $showName2 = join(' - ', grep { $_ } ($showDate, $meta->{venue} || $meta->{coverage}));
+			my $gainDb = _gainForItem($meta);
 
 			# Archive.org carries each track in several formats; keep only the
 			# best-priority file per track so we don't list duplicates.
@@ -972,10 +975,11 @@ sub trackListHandler {
 
 			my @items = map {
 				my $t = $byTrack{$_};
+				my $rawUrl = DOWNLOAD_URL . $identifier . '/' . uri_escape_utf8($t->{file});
 				{
 					name      => $t->{name},
 					type      => 'audio',
-					play      => DOWNLOAD_URL . $identifier . '/' . uri_escape_utf8($t->{file}),
+					play      => defined $gainDb ? Plugins::ArchiveLMA::ProtocolHandler->wrapUrl($rawUrl, $gainDb) : $rawUrl,
 					image     => IMAGE_URL . $identifier,
 					duration  => $t->{duration},
 					on_select => 'play',
@@ -1132,6 +1136,32 @@ sub _addAllItem {
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ADDED'), showBriefly => 1 } ] });
 		},
 	};
+}
+
+# Looks up the configured dB gain for a show, from its own archive.org
+# "collection" metadata field (a single identifier, or an array when an item
+# is cross-listed in more than one) against Settings > per-collection gain.
+# Returns undef - meaning "play the plain URL, no archivelma:// wrapping
+# needed" - when compensation is off entirely, or when none of the item's
+# collections have a non-zero gain configured.
+sub _gainForItem {
+	my $meta = shift;
+
+	return unless $prefs->get('gainCompensationEnabled');
+
+	my $gains = $prefs->get('collectionGains') || {};
+	return unless %$gains;
+
+	my $itemCollections = $meta->{collection};
+	$itemCollections = [ $itemCollections ] unless ref $itemCollections eq 'ARRAY';
+
+	for my $c (@$itemCollections) {
+		next unless defined $c && length $c;
+		my $gain = $gains->{$c};
+		return $gain + 0 if defined $gain && $gain ne '' && $gain != 0;
+	}
+
+	return undef;
 }
 
 sub _formatPriority {

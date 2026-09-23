@@ -15,7 +15,7 @@ WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 mkdir "$WORK_DIR/ArchiveLMA"
-cp Plugin.pm Settings.pm install.xml strings.txt "$WORK_DIR/ArchiveLMA/"
+cp Plugin.pm ProtocolHandler.pm Settings.pm install.xml strings.txt "$WORK_DIR/ArchiveLMA/"
 cp -r HTML "$WORK_DIR/ArchiveLMA/"
 
 rm -f "$ZIP_NAME"
