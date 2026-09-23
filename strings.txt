@@ -15,6 +15,9 @@ PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC
 PLUGIN_ARCHIVELMA_COLLECTION_GAIN
 	EN	Gain (dB)
 
+PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT
+	EN	Volume adjustment in decibels for this collection. Positive boosts the volume, negative reduces it - whole numbers or decimals both work (e.g. 8, -3.5). Leave blank or 0 for no change. Only takes effect when "Compensate for Quiet Recordings" below is turned on.
+
 PLUGIN_ARCHIVELMA_STREAMING_QUALITY
 	EN	Streaming Quality
 
