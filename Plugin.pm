@@ -58,8 +58,8 @@ use constant DEFAULT_DISCOVER_SORT => 'downloads';
 # (streamingQuality pref); either way, a track missing the top choice just
 # falls through to the next one that's actually available for it.
 my %FORMAT_PRIORITY = (
-	quality   => [ 'Flac', 'VBR MP3', 'MP3', '128Kbps MP3', 'Ogg Vorbis' ],
-	bandwidth => [ 'VBR MP3', 'MP3', '128Kbps MP3', 'Ogg Vorbis', 'Flac' ],
+	quality   => [ 'Flac', 'VBR MP3', 'MP3', 'Ogg Vorbis', '128Kbps MP3' ],
+	bandwidth => [ 'VBR MP3', 'MP3', 'Ogg Vorbis', '128Kbps MP3', 'Flac' ],
 );
 use constant DEFAULT_STREAMING_QUALITY => 'quality';
 
