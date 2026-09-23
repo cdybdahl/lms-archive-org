@@ -23,11 +23,12 @@ sub page {
 
 # The collection list is managed by hand below rather than through the
 # generic pref_* auto-save mechanism, since it's a variable-length list
-# rather than a single value. indexRebuildHour is a plain scalar, so it
-# uses the generic mechanism (the "pref_indexRebuildHour" field in
-# basic.html) rather than needing its own hand-rolled handling.
+# rather than a single value. indexRebuildHour and rebuildIndexOnRestart are
+# plain scalars, so they use the generic mechanism (the "pref_indexRebuildHour"
+# and "pref_rebuildIndexOnRestart" fields in basic.html) rather than needing
+# their own hand-rolled handling.
 sub prefs {
-	return ($prefs, qw(indexRebuildHour));
+	return ($prefs, qw(indexRebuildHour rebuildIndexOnRestart));
 }
 
 sub handler {
@@ -66,6 +67,10 @@ sub handler {
 		if (join("\x00", sort @before) ne join("\x00", sort @$collections)) {
 			$collectionsChanged = 1;
 			Plugins::ArchiveLMA::Plugin::rebuildValueIndexSoon();
+		}
+		elsif ($params->{rebuildIndexNow}) {
+			Plugins::ArchiveLMA::Plugin::rebuildValueIndexSoon();
+			$params->{indexRebuildTriggered} = 1;
 		}
 	}
 

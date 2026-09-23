@@ -7,6 +7,8 @@ package Plugins::ArchiveLMA::Plugin;
 use strict;
 use base qw(Slim::Plugin::OPMLBased);
 
+use File::Path qw(mkpath);
+use File::Spec::Functions qw(catdir catfile);
 use JSON::XS::VersionOneAndTwo;
 use URI::Escape qw(uri_escape_utf8);
 
@@ -33,6 +35,8 @@ use constant MAX_SCRAPE_PAGES   => 40;                                 # safety 
 use constant INDEX_BUDGET_ITEMS => SCRAPE_PAGE_SIZE * MAX_SCRAPE_PAGES; # ~400k - covers etree (~295k), well short of radioprograms (~5M)
 use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server start before the first background build, so a fresh install/restart isn't left with an empty index until the next scheduled hour
 use constant DEFAULT_INDEX_REBUILD_HOUR  => 4;       # 4am local, as a quiet-hours default for the daily rebuild
+use constant INDEX_CACHE_SUBDIR  => 'ArchiveLMA';    # under the server's cachedir
+use constant INDEX_CACHE_FILE    => 'valueindex.json';
 use constant HTTP_MAX_RETRIES    => 1;           # archive.org occasionally hiccups; one silent retry covers it
 use constant HTTP_RETRY_DELAY    => 1.5;         # seconds before retrying
 use constant DISCOVER_ROWS       => 100;         # collections shown per Settings > Discover search page
@@ -60,11 +64,13 @@ my $log = Slim::Utils::Log->addLogCategory({
 
 my $prefs = preferences('plugin.archivelma');
 
-# In-memory only (not persisted): the built artist/venue index, keyed by
-# field ('creator'/'venue'). Rebuilt in the background - see
-# _prewarmValueIndexes - so an interactive Browse by Artist/Venue tap never
-# has to wait on the several-minutes-long full scrape a large collection
-# like etree needs.
+# The built artist/venue index, keyed by field ('creator'/'venue'). Rebuilt
+# in the background - see _prewarmValueIndexes - so an interactive Browse by
+# Artist/Venue tap never has to wait on the several-minutes-long full scrape
+# a large collection like etree needs. Also mirrored to disk (see
+# _persistValueIndexes/_loadPersistedValueIndexes) so a restart can reload
+# it instead of paying for that scrape again - a full rebuild on every
+# restart is more than an underpowered Pi can comfortably keep up with.
 my %valueIndex;
 my $indexBuildInFlight = 0;
 
@@ -179,7 +185,9 @@ sub _getJSON {
 sub initPlugin {
 	my $class = shift;
 
-	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR });
+	$prefs->init({ collections => [ DEFAULT_COLLECTION ], listenLater => [], favorites => [], indexRebuildHour => DEFAULT_INDEX_REBUILD_HOUR, rebuildIndexOnRestart => 0 });
+
+	_loadPersistedValueIndexes();
 
 	# One-time migration from the earlier single-collection pref.
 	$prefs->migrate(1, sub {
@@ -194,7 +202,7 @@ sub initPlugin {
 		Plugins::ArchiveLMA::Settings->new();
 	}
 
-	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + INDEX_PREWARM_STARTUP_DELAY, \&_prewarmValueIndexes);
+	Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + INDEX_PREWARM_STARTUP_DELAY, sub { _prewarmValueIndexes(1) });
 
 	$class->SUPER::initPlugin(
 		feed   => \&handleFeed,
@@ -625,6 +633,74 @@ sub _storeValueIndexes {
 	}
 
 	$indexBuildInFlight = 0;
+
+	_persistValueIndexes();
+}
+
+# Where the on-disk copy of %valueIndex lives, under the server's own
+# cachedir (so it's cleared along with everything else if the user ever
+# wipes the LMS cache).
+sub _indexCacheFile {
+	my $dir = catdir(preferences('server')->get('cachedir'), INDEX_CACHE_SUBDIR);
+	mkpath($dir) unless -d $dir;
+	return catfile($dir, INDEX_CACHE_FILE);
+}
+
+# Mirrors %valueIndex to disk after every successful build, so a restart can
+# reload it (see _loadPersistedValueIndexes) instead of re-running the full
+# scrape. Written to a temp file and renamed into place so a crash mid-write
+# never leaves a truncated/corrupt file behind.
+sub _persistValueIndexes {
+	my $file = _indexCacheFile();
+
+	my $json = eval { to_json(\%valueIndex) };
+	if ($@) {
+		$log->warn("Couldn't serialize artist/venue index for $file: $@");
+		return;
+	}
+
+	my $tmp = "$file.tmp";
+	if (!open(my $fh, '>', $tmp)) {
+		$log->warn("Couldn't write $tmp: $!");
+		return;
+	}
+	else {
+		print $fh $json;
+		close($fh);
+	}
+
+	rename($tmp, $file) or $log->warn("Couldn't rename $tmp to $file: $!");
+}
+
+# Loads the on-disk copy of the index straight into %valueIndex, if one
+# exists. Called synchronously from initPlugin so Browse by Artist/Venue has
+# something to serve immediately on startup rather than sitting empty for
+# INDEX_PREWARM_STARTUP_DELAY seconds (or, with rebuildIndexOnRestart off,
+# indefinitely). _ensureValueIndex still checks the loaded copy's own
+# collections/builtAt before trusting it, so stale or mismatched data here
+# just falls back to a normal rebuild rather than being served as-is.
+sub _loadPersistedValueIndexes {
+	my $file = _indexCacheFile();
+	return unless -e $file;
+
+	if (!open(my $fh, '<', $file)) {
+		$log->warn("Couldn't open persisted index $file: $!");
+		return;
+	}
+	else {
+		local $/;
+		my $json = <$fh>;
+		close($fh);
+
+		my $loaded = eval { from_json($json) };
+		if ($@ || ref $loaded ne 'HASH') {
+			$log->warn("Couldn't parse persisted index $file: $@");
+			return;
+		}
+
+		%valueIndex = %$loaded;
+		$log->info("Loaded persisted artist/venue index from $file");
+	}
 }
 
 # Epoch for the next occurrence of the user's chosen local hour (Settings >
@@ -645,9 +721,24 @@ sub _nextScheduledRun {
 # with an empty index for up to a day) and then every day at the user's
 # chosen local hour, so the artist/venue index is normally already warm by
 # the time anyone taps Browse by Artist/Venue.
+#
+# $isStartup is only true for that first, post-startup call. If
+# _loadPersistedValueIndexes already warmed %valueIndex from disk by then
+# and the user hasn't asked to always rebuild on restart, skip the scrape
+# here - the persisted copy (still subject to _ensureValueIndex's own
+# staleness/collection check) is good enough until the next scheduled hour,
+# and a full re-scrape on every restart is exactly what's too much for
+# something like a Pi4.
 sub _prewarmValueIndexes {
+	my $isStartup = shift;
+
 	Slim::Utils::Timers::killTimers(undef, \&_prewarmValueIndexes);
 	Slim::Utils::Timers::setTimer(undef, _nextScheduledRun(), \&_prewarmValueIndexes);
+
+	if ($isStartup && %valueIndex && !$prefs->get('rebuildIndexOnRestart')) {
+		$log->info("Skipping startup index rebuild - using the persisted copy until the next scheduled rebuild");
+		return;
+	}
 
 	_collectionCounts(sub {
 		my $counts = shift;

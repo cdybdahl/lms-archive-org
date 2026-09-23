@@ -42,6 +42,21 @@
 
 	[% END %]
 
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_REBUILD_ON_RESTART" desc="PLUGIN_ARCHIVELMA_REBUILD_ON_RESTART_DESC" %]
+
+		<input type="checkbox" name="pref_rebuildIndexOnRestart" id="pref_rebuildIndexOnRestart" [% IF prefs.pref_rebuildIndexOnRestart %] checked [% END %] value="1" />
+
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_REBUILD_NOW" desc="PLUGIN_ARCHIVELMA_REBUILD_NOW_DESC" %]
+
+		<input type="submit" name="rebuildIndexNow" value="[% 'PLUGIN_ARCHIVELMA_REBUILD_NOW' | string %]" class="stdclick" />
+		[% IF indexRebuildTriggered %]
+			<span class="archivelma_rebuild_triggered">[% "PLUGIN_ARCHIVELMA_REBUILD_NOW_TRIGGERED" | string %]</span>
+		[% END %]
+
+	[% END %]
+
 	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_DISCOVER" desc="PLUGIN_ARCHIVELMA_DISCOVER_DESC" %]
 
 		<input type="hidden" name="discoverCurrentPage" value="[% discoverPage %]" />

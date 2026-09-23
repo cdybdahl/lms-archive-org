@@ -16,7 +16,22 @@ PLUGIN_ARCHIVELMA_REBUILD_HOUR
 	EN	Rebuild Artist/Venue Index At
 
 PLUGIN_ARCHIVELMA_REBUILD_HOUR_DESC
-	EN	The local time of day to rebuild the Browse by Artist/Venue index in the background. A large collection like the whole Live Music Archive can take several minutes to fully index, so picking a quiet hour keeps it off any time you're likely to be listening. Also runs once shortly after the server starts, and again shortly after you change your collection list above.
+	EN	The local time of day to rebuild the Browse by Artist/Venue index in the background. A large collection like the whole Live Music Archive can take several minutes to fully index, so picking a quiet hour keeps it off any time you're likely to be listening. Also runs shortly after you change your collection list above, or use Rebuild Index Now below. On a fresh install, or if "Rebuild Index on Server Restart" is on, it also runs once shortly after the server starts.
+
+PLUGIN_ARCHIVELMA_REBUILD_ON_RESTART
+	EN	Rebuild Index on Server Restart
+
+PLUGIN_ARCHIVELMA_REBUILD_ON_RESTART_DESC
+	EN	Off by default: the artist/venue index is saved to disk and reloaded on restart instead of being rebuilt from scratch, so Browse by Artist/Venue comes back instantly even on slower hardware like a Raspberry Pi. Turn this on to always rebuild it from archive.org on every restart instead.
+
+PLUGIN_ARCHIVELMA_REBUILD_NOW
+	EN	Rebuild Index Now
+
+PLUGIN_ARCHIVELMA_REBUILD_NOW_DESC
+	EN	Rebuild the Browse by Artist/Venue index immediately in the background, without waiting for the scheduled time above.
+
+PLUGIN_ARCHIVELMA_REBUILD_NOW_TRIGGERED
+	EN	Rebuild started in the background - this can take a few minutes for a large collection.
 
 PLUGIN_ARCHIVELMA_ADD_COLLECTION
 	EN	Add a collection
