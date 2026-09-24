@@ -10,6 +10,7 @@
 				<td>
 					<input type="text" class="stdedit" name="newcollection" value="" size="40" />
 				</td>
+				<td></td>
 			</tr>
 
 			[% IF prefs.collections.size %]
@@ -17,17 +18,20 @@
 				<td class="prefHead">
 					[% "PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS" | string %]
 				</td>
-				<td title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]">
+				<td class="prefHead" title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]">
 					[% "PLUGIN_ARCHIVELMA_COLLECTION_GAIN" | string %]
 				</td>
-				<td>
+				<td class="prefHead">
 					[% "DELETE" | string %]
 				</td>
 			</tr>
 			[% FOREACH c = prefs.collections %]
 			<tr>
 				<td>[% c | html %]</td>
-				<td><input type="text" class="stdedit" name="gain_[% c | html %]" value="[% prefs.collectionGains.$c | html %]" size="4" placeholder="0" title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]" /></td>
+				<td>
+					<input type="text" class="stdedit" name="gain_[% c | html %]" value="[% prefs.collectionGains.$c | html %]" size="4" placeholder="0" title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]" />
+					dB
+				</td>
 				<td><input name="delete" type="checkbox" value="[% c | html %]"></td>
 			</tr>
 			[% END %]
