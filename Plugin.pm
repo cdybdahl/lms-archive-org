@@ -32,6 +32,7 @@ use constant META_CACHE_EXPIRY       => 86400 * 7;   # 1 week for per-show track
 use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist/venue lists
 use constant SCRAPE_PAGE_SIZE   => 10000;                              # items per scrape request
 use constant MAX_SCRAPE_PAGES   => 40;                                 # safety cap on a full enumeration
+use constant ADVANCEDSEARCH_MAX_OFFSET => 10000;                       # advancedsearch.php errors past this row offset - see _buildValueIndexes
 use constant INDEX_BUDGET_ITEMS => SCRAPE_PAGE_SIZE * MAX_SCRAPE_PAGES; # ~400k - covers etree (~295k), well short of radioprograms (~5M)
 use constant INDEX_PREWARM_STARTUP_DELAY => 60;      # seconds after server start before the first background build, so a fresh install/restart isn't left with an empty index until the next scheduled hour
 use constant DEFAULT_INDEX_REBUILD_HOUR  => 4;       # 4am local, as a quiet-hours default for the daily rebuild
@@ -1023,10 +1024,19 @@ sub randomShowHandler {
 			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 		}
 
+		# advancedsearch.php errors out past row offset ADVANCEDSEARCH_MAX_OFFSET
+		# (see _buildValueIndexes) - a collection the size of etree (~295k) blows
+		# way past that, so without this clamp the random page number picked
+		# below would 400 whenever it landed past the cap. This does mean the
+		# random pool is effectively just the first ADVANCEDSEARCH_MAX_OFFSET
+		# matches rather than the true full catalog once a collection that large
+		# is included, but that's still plenty of variety and beats erroring out.
+		my $pickPool = $total > ADVANCEDSEARCH_MAX_OFFSET ? ADVANCEDSEARCH_MAX_OFFSET : $total;
+
 		my $pickUrl = SEARCH_URL . '?' . join('&',
 			'q=' . uri_escape_utf8(_baseQuery()),
 			'rows=1',
-			'page=' . (int(rand($total)) + 1),
+			'page=' . (int(rand($pickPool)) + 1),
 			'output=json',
 			'fl[]=identifier',
 		);

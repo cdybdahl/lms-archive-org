@@ -4,7 +4,7 @@
 	<id>5921a9d7-2e03-4e33-ad08-6009398995ce</id>
 	<name>PLUGIN_ARCHIVELMA</name>
 	<module>Plugins::ArchiveLMA::Plugin</module>
-	<version>1.25</version>
+	<version>1.26</version>
 	<description>PLUGIN_ARCHIVELMA_DESC</description>
 	<creator>chad</creator>
 	<category>musicservices</category>
