@@ -1,10 +1,21 @@
 [% PROCESS settings/header.html %]
 
+	<style>
+		/* Deliberately not the skin's own .prefHead - that class is also
+		   matched by the skin's ".settingGroup .prefHead" rule, which
+		   absolutely positions it to sit over the setting's own title
+		   (meant only for that title, not for a label inside a table
+		   nested further down the same .settingGroup) and overlapped
+		   every row label in both tables below with the section heading
+		   above them. */
+		.archivelma_rowLabel { font-weight: bold; }
+	</style>
+
 	[% WRAPPER setting title="PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS" desc="PLUGIN_ARCHIVELMA_SETTING_COLLECTIONS_DESC" %]
 
 		<table border="0" class="archivelma_collections">
 			<tr>
-				<td class="firstColumn prefHead">
+				<td class="firstColumn archivelma_rowLabel">
 					[% "PLUGIN_ARCHIVELMA_ADD_COLLECTION" | string %]
 				</td>
 				<td>
@@ -15,13 +26,13 @@
 
 			[% IF prefs.collections.size %]
 			<tr>
-				<td class="prefHead">
+				<td class="archivelma_rowLabel">
 					[% "PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS" | string %]
 				</td>
-				<td class="prefHead" title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]">
+				<td class="archivelma_rowLabel" title="[% 'PLUGIN_ARCHIVELMA_COLLECTION_GAIN_HINT' | string | html %]">
 					[% "PLUGIN_ARCHIVELMA_COLLECTION_GAIN" | string %]
 				</td>
-				<td class="prefHead">
+				<td class="archivelma_rowLabel">
 					[% "DELETE" | string %]
 				</td>
 			</tr>
@@ -94,7 +105,7 @@
 
 		<table border="0" class="archivelma_discover">
 			<tr>
-				<td class="firstColumn prefHead">
+				<td class="firstColumn archivelma_rowLabel">
 					[% "PLUGIN_ARCHIVELMA_DISCOVER_SEARCH" | string %]
 				</td>
 				<td>
@@ -103,7 +114,7 @@
 				</td>
 			</tr>
 			<tr>
-				<td class="prefHead">
+				<td class="archivelma_rowLabel">
 					[% "PLUGIN_ARCHIVELMA_DISCOVER_SORT" | string %]
 				</td>
 				<td>
