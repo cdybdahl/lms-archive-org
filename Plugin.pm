@@ -1003,6 +1003,12 @@ sub trackListHandler {
 				unshift @items, _addAllItem($client, \@urls);
 				unshift @items, _playAllItem($client, \@urls);
 
+				# Only the screen Random Show itself lands on offers a way to
+				# reshuffle - see randomShowHandler for why getting a new pick
+				# is its own explicit action rather than something that can
+				# happen implicitly whenever this screen gets resolved again.
+				unshift @items, _pickAnotherItem($client) if $passthrough->{isRandom};
+
 				# The show list (search/browse) already shows title + this
 				# same date/venue subtitle before you pick a show, but Random
 				# Show drops you straight into the track list with no such
@@ -1025,15 +1031,16 @@ sub trackListHandler {
 	);
 }
 
-sub randomShowHandler {
-	my ($client, $cb, $args) = @_;
+# Resolves a single random identifier and hands it to $onPicked (or undef on
+# failure, already logged). Not cached - every call should be able to land on
+# a different show.
+sub _pickRandomIdentifier {
+	my ($onPicked) = @_;
 
 	_totalShowCount(sub {
 		my $total = shift;
 
-		if (!$total) {
-			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-		}
+		return $onPicked->(undef) unless $total;
 
 		# advancedsearch.php errors out past row offset ADVANCEDSEARCH_MAX_OFFSET
 		# (see _buildValueIndexes) - a collection the size of etree (~295k) blows
@@ -1052,38 +1059,78 @@ sub randomShowHandler {
 			'fl[]=identifier',
 		);
 
-		# Not cached - every pick should be able to land on a different show.
-		#
-		# This used to hand back a single link into the picked show (its
-		# identifier baked into the URL via passthrough) rather than the
-		# track list directly, on the theory that a client re-fetching the
-		# displayed screen for an unrelated reason (e.g. switching
-		# list/artwork display style) would then land on the same show
-		# deterministically, the way every other, non-random show already
-		# does. In practice this broke worse: activating that link could
-		# independently re-invoke this handler to resolve the "go" action,
-		# landing on a *different* fresh pick than the one just shown - a
-		# title/content mismatch, not just an unwanted reshuffle. Back to
-		# picking once and going straight to the track list; the trade-off
-		# is that a display-style change can still occasionally reshuffle
-		# the pick, but the show you land on is always the one you're shown.
 		_getJSON($pickUrl, {},
 			sub {
 				my $pickResult = shift;
-				my $identifier = $pickResult->{response}{docs}[0]{identifier};
+				$onPicked->($pickResult->{response}{docs}[0]{identifier});
+			},
+			sub {
+				$log->error("Random pick request failed: $_[0]");
+				$onPicked->(undef);
+			},
+		);
+	});
+}
+
+# Random Show remembers its last pick per player (in $client's plugin scratch
+# data) and just re-shows it on every entry, rather than picking fresh each
+# time. Getting a new one is instead the explicit "Pick Another Random Show"
+# item _pickAnotherItem() adds to the track list below.
+#
+# This used to pick fresh on every entry, but the server can call this
+# generator more than once for what looks like one logical screen -
+# redisplaying it for an unrelated reason (switching list/artwork display
+# style), or independently re-invoking it to resolve activating an item on
+# it. Picking anew on every one of those calls doesn't just reshuffle
+# unexpectedly - a version of this that tried to hand back a link to a freshly
+# picked show, rather than the track list directly, hit exactly that: the
+# link's activation re-picked independently of what was just displayed,
+# showing one show's title/metadata over a completely different show's
+# tracks. Reading back a stored pick is safe to do any number of times, since
+# it's a read, not a new dice roll - only the explicit "Pick Another" button
+# actually rolls again.
+sub randomShowHandler {
+	my ($client, $cb, $args) = @_;
+
+	if ($client && (my $identifier = $client->pluginData('randomPick'))) {
+		return trackListHandler($client, $cb, $args, { identifier => $identifier, isRandom => 1 });
+	}
+
+	_pickRandomIdentifier(sub {
+		my $identifier = shift;
+
+		if (!$identifier) {
+			return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+		}
+
+		$client->pluginData('randomPick', $identifier) if $client;
+
+		trackListHandler($client, $cb, $args, { identifier => $identifier, isRandom => 1 });
+	});
+}
+
+sub _pickAnotherItem {
+	my ($client) = @_;
+
+	return {
+		name => cstring($client, 'PLUGIN_ARCHIVELMA_PICK_ANOTHER'),
+		type => 'link',
+		url  => sub {
+			my ($client, $cb, $args) = @_;
+
+			_pickRandomIdentifier(sub {
+				my $identifier = shift;
 
 				if (!$identifier) {
 					return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 				}
 
-				trackListHandler($client, $cb, $args, { identifier => $identifier });
-			},
-			sub {
-				$log->error("Random pick request failed: $_[0]");
-				$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
-			},
-		);
-	});
+				$client->pluginData('randomPick', $identifier) if $client;
+
+				trackListHandler($client, $cb, $args, { identifier => $identifier, isRandom => 1 });
+			});
+		},
+	};
 }
 
 sub _favoriteItem {
