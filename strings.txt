@@ -66,6 +66,9 @@ PLUGIN_ARCHIVELMA_CURRENT_COLLECTIONS
 PLUGIN_ARCHIVELMA_INVALID_COLLECTION
 	EN	"%s" doesn't look like a valid archive.org collection identifier (letters, numbers, dots, underscores, and hyphens only) - not added.<br/>
 
+PLUGIN_ARCHIVELMA_INVALID_GAIN
+	EN	"%s" doesn't look like a valid dB value for "%s" - kept the previous value.<br/>
+
 PLUGIN_ARCHIVELMA_SEARCH
 	EN	Search
 

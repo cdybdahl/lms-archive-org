@@ -76,15 +76,32 @@ sub handler {
 
 		# One "gain_<identifier>" field per row currently shown in the
 		# collections table (see basic.html); only non-zero, numeric values
-		# are kept; a blank/zero/invalid field just means no per-collection
-		# gain applies for that collection.
+		# are kept; a blank/zero field just means no per-collection gain
+		# applies for that collection. An unparseable field keeps whatever
+		# was already saved rather than silently dropping it, since this is
+		# a plain text input and a bad submission (typo, stray paste) is no
+		# reason to lose a value the user set correctly last time.
+		my $existingGains = $prefs->get('collectionGains') || {};
 		my %gains;
 		for my $id (@$collections) {
 			my $raw = $params->{"gain_$id"};
 			next unless defined $raw;
 			$raw =~ s/^\s+|\s+$//g;
-			next unless $raw =~ /^-?\d+(?:\.\d+)?$/;
-			$gains{$id} = $raw + 0 if $raw + 0 != 0;
+			next unless length $raw;
+
+			my $normalized = $raw;
+			# A lone comma decimal separator (e.g. "-3,5") is accepted too -
+			# non-US locales commonly type it that way out of habit, and this
+			# is a plain text field so the browser never normalizes it.
+			$normalized =~ s/,/./ if ($normalized =~ tr/,//) == 1 && $normalized !~ /\./;
+
+			if ($normalized !~ /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/) {
+				$params->{warning} .= sprintf(string('PLUGIN_ARCHIVELMA_INVALID_GAIN'), $raw, $id);
+				$gains{$id} = $existingGains->{$id} if defined $existingGains->{$id};
+				next;
+			}
+
+			$gains{$id} = $normalized + 0 if $normalized + 0 != 0;
 		}
 		$prefs->set('collectionGains', \%gains);
 	}
