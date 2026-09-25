@@ -955,7 +955,9 @@ sub trackListHandler {
 			my $showName = $meta->{title} || $identifier;
 			my $showDate = $meta->{date};
 			$showDate =~ s/T.*$// if $showDate;
-			my $showName2 = join(' - ', grep { $_ } ($showDate, $meta->{venue} || $meta->{coverage}));
+			my $creator = $meta->{creator};
+			$creator = join(', ', @$creator) if ref $creator eq 'ARRAY';
+			my $showName2 = join(' - ', grep { $_ } ($creator, $showDate, $meta->{venue} || $meta->{coverage}));
 			my $gainDb = _gainForItem($meta);
 
 			# Archive.org carries each track in several formats; keep only the
@@ -1000,6 +1002,15 @@ sub trackListHandler {
 				unshift @items, _favoriteItem($client, $identifier, $showName, $showName2);
 				unshift @items, _addAllItem($client, \@urls);
 				unshift @items, _playAllItem($client, \@urls);
+
+				# The show list (search/browse) already shows title + this
+				# same date/venue subtitle before you pick a show, but Random
+				# Show drops you straight into the track list with no such
+				# screen behind it - so restate it here too, on every path,
+				# rather than only fixing the one entry point that's missing it.
+				if (length $showName2) {
+					unshift @items, { type => 'text', name => $showName, name2 => $showName2 };
+				}
 			}
 			else {
 				push @items, { name => cstring($client, 'EMPTY') };
