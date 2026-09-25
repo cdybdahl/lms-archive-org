@@ -962,23 +962,38 @@ sub trackListHandler {
 
 			# Archive.org carries each track in several formats; keep only the
 			# best-priority file per track so we don't list duplicates.
+			#
+			# Group by the filename with its extension stripped, not by the
+			# "track" field - archive.org's derived formats (e.g. the Ogg
+			# Vorbis transcode) often leave it blank even though the flac/mp3
+			# versions of the exact same song have it filled in. Grouping by
+			# track number put each such format in its own bucket, since a
+			# missing track fell back to the full (extension-and-all)
+			# filename as the key, which never matched another format's key
+			# for the same song - so every format survived as a separate
+			# "track" and Play All queued all of them. The filename stem is
+			# reliably shared across an item's format derivatives, since
+			# that's how archive.org's own transcoder names its outputs.
 			my %byTrack;
 			for my $file (@{ $result->{files} }) {
 				my $priority = _formatPriority($file->{format});
 				next unless defined $priority;
 
-				my $track = $file->{track};
-				my $sortKey = (defined $track && $track =~ /^\d+$/) ? sprintf('%03d', $track) : $file->{name};
+				(my $base = $file->{name}) =~ s/\.[^.]+$//;
 
-				if (!$byTrack{$sortKey} || $priority < $byTrack{$sortKey}{priority}) {
+				if (!$byTrack{$base} || $priority < $byTrack{$base}{priority}) {
 					my $title = $file->{title};
 					$title = undef if $title && lc($title) eq 'untitled';
 
-					$byTrack{$sortKey} = {
+					my $track = $file->{track};
+					my $hasTrackNum = defined $track && $track =~ /^\d+$/;
+
+					$byTrack{$base} = {
 						priority => $priority,
-						name     => $title || (defined $track ? "Track $track" : $file->{name}),
+						name     => $title || ($hasTrackNum ? "Track $track" : $base),
 						file     => $file->{name},
 						duration => _parseDuration($file->{length}),
+						sortKey  => $hasTrackNum ? sprintf('%03d', $track) : $base,
 					};
 				}
 			}
@@ -994,7 +1009,7 @@ sub trackListHandler {
 					duration  => $t->{duration},
 					on_select => 'play',
 				};
-			} sort keys %byTrack;
+			} sort { $byTrack{$a}{sortKey} cmp $byTrack{$b}{sortKey} } keys %byTrack;
 
 			if (@items) {
 				my @urls = map { $_->{play} } @items;
