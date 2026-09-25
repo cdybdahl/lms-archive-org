@@ -1049,41 +1049,34 @@ sub randomShowHandler {
 			'rows=1',
 			'page=' . (int(rand($pickPool)) + 1),
 			'output=json',
-			'fl[]=identifier', 'fl[]=title', 'fl[]=date', 'fl[]=venue', 'fl[]=coverage',
+			'fl[]=identifier',
 		);
 
 		# Not cached - every pick should be able to land on a different show.
-		# This only resolves which show to offer, though - the result is a
-		# single link into that show's own track list (identifier baked into
-		# the URL via passthrough), not the track list itself. That matters
-		# because a client can re-fetch whatever screen it's showing for
-		# reasons that have nothing to do with picking again (e.g. switching
-		# list/artwork display style reloads the current page); handing back
-		# a link makes that redisplay land on the same show deterministically,
-		# exactly like every other, non-random show already does, instead of
-		# re-running the random pick.
+		#
+		# This used to hand back a single link into the picked show (its
+		# identifier baked into the URL via passthrough) rather than the
+		# track list directly, on the theory that a client re-fetching the
+		# displayed screen for an unrelated reason (e.g. switching
+		# list/artwork display style) would then land on the same show
+		# deterministically, the way every other, non-random show already
+		# does. In practice this broke worse: activating that link could
+		# independently re-invoke this handler to resolve the "go" action,
+		# landing on a *different* fresh pick than the one just shown - a
+		# title/content mismatch, not just an unwanted reshuffle. Back to
+		# picking once and going straight to the track list; the trade-off
+		# is that a display-style change can still occasionally reshuffle
+		# the pick, but the show you land on is always the one you're shown.
 		_getJSON($pickUrl, {},
 			sub {
 				my $pickResult = shift;
-				my $doc = $pickResult->{response}{docs}[0];
-				my $identifier = $doc && $doc->{identifier};
+				my $identifier = $pickResult->{response}{docs}[0]{identifier};
 
 				if (!$identifier) {
 					return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 				}
 
-				my $date = $doc->{date};
-				$date =~ s/T.*$// if $date;
-				my $subtitle = join(' - ', grep { $_ } ($date, $doc->{venue} || $doc->{coverage}));
-
-				$cb->({ items => [ {
-					name        => _favoriteMark($identifier) . ($doc->{title} || $identifier),
-					name2       => $subtitle,
-					type        => 'link',
-					image       => IMAGE_URL . $identifier,
-					url         => \&trackListHandler,
-					passthrough => [ { identifier => $identifier } ],
-				} ] });
+				trackListHandler($client, $cb, $args, { identifier => $identifier });
 			},
 			sub {
 				$log->error("Random pick request failed: $_[0]");
