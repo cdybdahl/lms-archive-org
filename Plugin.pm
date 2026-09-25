@@ -13,6 +13,7 @@ use JSON::XS::VersionOneAndTwo;
 use URI::Escape qw(uri_escape_utf8);
 
 use Slim::Networking::SimpleAsyncHTTP;
+use Slim::Utils::Cache;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(cstring);
@@ -30,6 +31,7 @@ use constant PAGE_SIZE_DEFAULT => 50;
 use constant LIST_CACHE_EXPIRY       => 3600;        # 1 hour for search/browse listings
 use constant META_CACHE_EXPIRY       => 86400 * 7;   # 1 week for per-show track listings
 use constant VALUE_LIST_CACHE_EXPIRY => 86400;       # 1 day for the full artist/venue lists
+use constant RANDOM_PICK_STICKY_EXPIRY => 8;          # seconds a random pick stays put for the same browse-session path - see randomShowHandler. Short on purpose: this menu item's item_id has no session-unique prefix (see randomShowHandler), so a genuine repeat visit reuses the exact same key as a redisplay - long enough to survive the near-instant page reload a display-style change triggers, short enough that a real re-pick a few seconds later still lands fresh
 use constant SCRAPE_PAGE_SIZE   => 10000;                              # items per scrape request
 use constant MAX_SCRAPE_PAGES   => 40;                                 # safety cap on a full enumeration
 use constant ADVANCEDSEARCH_MAX_OFFSET => 10000;                       # advancedsearch.php errors past this row offset - see _buildValueIndexes
@@ -1028,6 +1030,26 @@ sub trackListHandler {
 sub randomShowHandler {
 	my ($client, $cb, $args) = @_;
 
+	# item_id identifies this spot in the menu tree. The server re-runs this
+	# handler not just when the user genuinely re-selects Random Show, but
+	# also when a client redisplays the very same screen for an unrelated
+	# reason - e.g. switching list/artwork display style, which changes a
+	# server-side preference and forces the current page to be refetched
+	# from scratch. Without this, that refetch looked identical to asking
+	# for a new show and silently swapped it out. A short sticky window
+	# keyed on item_id (plus the player, so two players never share a pick)
+	# keeps a redisplay on the same show.
+	my $itemId = $args->{params}{item_id};
+	my $stickyKey = (defined $itemId && length $itemId)
+		? 'archivelma_random_' . ($client ? $client->id : '') . '_' . $itemId
+		: undef;
+
+	if ($stickyKey) {
+		if (my $sticky = Slim::Utils::Cache->new->get($stickyKey)) {
+			return trackListHandler($client, $cb, $args, { identifier => $sticky });
+		}
+	}
+
 	_totalShowCount(sub {
 		my $total = shift;
 
@@ -1052,7 +1074,8 @@ sub randomShowHandler {
 			'fl[]=identifier',
 		);
 
-		# Not cached - every pick should be able to land on a different show.
+		# Not HTTP-cached - every genuinely new pick should be able to land
+		# on a different show (see the item_id sticky check above).
 		_getJSON($pickUrl, {},
 			sub {
 				my $pickResult = shift;
@@ -1060,6 +1083,10 @@ sub randomShowHandler {
 
 				if (!$identifier) {
 					return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
+				}
+
+				if ($stickyKey) {
+					Slim::Utils::Cache->new->set($stickyKey, $identifier, RANDOM_PICK_STICKY_EXPIRY);
 				}
 
 				trackListHandler($client, $cb, $args, { identifier => $identifier });
