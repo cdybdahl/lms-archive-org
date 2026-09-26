@@ -12,6 +12,7 @@ use File::Spec::Functions qw(catdir catfile);
 use JSON::XS::VersionOneAndTwo;
 use URI::Escape qw(uri_escape_utf8);
 
+use Slim::Music::Info;
 use Slim::Networking::SimpleAsyncHTTP;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -1012,11 +1013,11 @@ sub trackListHandler {
 			} sort { $byTrack{$a}{sortKey} cmp $byTrack{$b}{sortKey} } keys %byTrack;
 
 			if (@items) {
-				my @urls = map { $_->{play} } @items;
+				my @audioItems = @items;
 				unshift @items, _listenLaterItem($client, $identifier, $showName, $showName2);
 				unshift @items, _favoriteItem($client, $identifier, $showName, $showName2);
-				unshift @items, _addAllItem($client, \@urls);
-				unshift @items, _playAllItem($client, \@urls);
+				unshift @items, _addAllItem($client, \@audioItems);
+				unshift @items, _playAllItem($client, \@audioItems);
 
 				# Only the screen Random Show itself lands on offers a way to
 				# reshuffle - see randomShowHandler for why getting a new pick
@@ -1200,8 +1201,28 @@ sub _listenLaterItem {
 	};
 }
 
+# Selecting a single track from the menu goes through LMS's own XMLBrowser
+# "go" handling, which registers the item's title/cover/duration against its
+# URL (Slim::Music::Info::setRemoteMetadata) before queuing it - that's the
+# only reason Now Playing shows anything for it, since these are plain
+# archive.org URLs with no metadata of their own to scan. Queuing a whole
+# list of bare URLs via playlist/playtracks or playlist/addtracks bypasses
+# that entirely, so Now Playing showed nothing for anything played this way.
+# Register the same metadata ourselves, the same way, before queuing.
+sub _registerTrackMetadata {
+	my ($tracks) = @_;
+
+	for my $t (@$tracks) {
+		Slim::Music::Info::setRemoteMetadata($t->{play}, {
+			title => $t->{name},
+			cover => $t->{image},
+			secs  => $t->{duration},
+		});
+	}
+}
+
 sub _playAllItem {
-	my ($client, $urls) = @_;
+	my ($client, $tracks) = @_;
 
 	return {
 		name       => cstring($client, 'PLUGIN_ARCHIVELMA_PLAY_ALL'),
@@ -1214,7 +1235,8 @@ sub _playAllItem {
 				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 			}
 
-			$client->execute([ 'playlist', 'playtracks', 'listRef', $urls ]);
+			_registerTrackMetadata($tracks);
+			$client->execute([ 'playlist', 'playtracks', 'listRef', [ map { $_->{play} } @$tracks ] ]);
 
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_PLAYING'), showBriefly => 1, nowPlaying => 1 } ] });
 		},
@@ -1222,7 +1244,7 @@ sub _playAllItem {
 }
 
 sub _addAllItem {
-	my ($client, $urls) = @_;
+	my ($client, $tracks) = @_;
 
 	return {
 		name       => cstring($client, 'PLUGIN_ARCHIVELMA_ADD_ALL'),
@@ -1235,7 +1257,8 @@ sub _addAllItem {
 				return $cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ERROR') } ] });
 			}
 
-			$client->execute([ 'playlist', 'addtracks', 'listRef', $urls ]);
+			_registerTrackMetadata($tracks);
+			$client->execute([ 'playlist', 'addtracks', 'listRef', [ map { $_->{play} } @$tracks ] ]);
 
 			$cb->({ items => [ { name => cstring($client, 'PLUGIN_ARCHIVELMA_ADDED'), showBriefly => 1 } ] });
 		},
